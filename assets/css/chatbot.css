@@ -1,6 +1,6 @@
 /**
  * PEWIK AI Chatbot - Bright & Accessible Design
- * Kolory firmowe PEWIK: Niebieski #0066CC, Zielony #00AA44
+ * Kolor przewodni: #2a3342 (ciemny granatowy)
  * Zaprojektowane z myślą o dostępności (WCAG 2.1 AA)
  */
 
@@ -16,18 +16,18 @@
 }
 
 /* ===========================================
-   Przycisk otwierania chatbota - jasny i przyjazny
+   Przycisk otwierania chatbota
    =========================================== */
 #pewik-chatbot-button {
 	width: 64px;
 	height: 64px;
 	border-radius: 50%;
-	background: linear-gradient(135deg, #0073e6 0%, #0066cc 100%);
+	background: #2a3342;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	cursor: pointer;
-	box-shadow: 0 8px 24px rgba(0, 115, 230, 0.35), 0 2px 8px rgba(0, 0, 0, 0.1);
+	box-shadow: 0 8px 24px rgba(42, 51, 66, 0.35), 0 2px 8px rgba(0, 0, 0, 0.1);
 	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	border: 3px solid #ffffff;
 	position: relative;
@@ -39,14 +39,14 @@
 	position: absolute;
 	width: 100%;
 	height: 100%;
-	background: linear-gradient(135deg, #00c853 0%, #00aa44 100%);
+	background: #3d4a5c;
 	opacity: 0;
 	transition: opacity 0.3s;
 }
 
 #pewik-chatbot-button:hover {
 	transform: scale(1.08);
-	box-shadow: 0 12px 32px rgba(0, 115, 230, 0.45), 0 4px 12px rgba(0, 0, 0, 0.15);
+	box-shadow: 0 12px 32px rgba(42, 51, 66, 0.45), 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 #pewik-chatbot-button:hover::before {
@@ -63,16 +63,16 @@
 	transform: scale(0.92);
 }
 
-/* Animacja pulsowania - bardziej delikatna */
+/* Animacja pulsowania */
 @keyframes pulse {
 	0%,
 	100% {
 		transform: scale(1);
-		box-shadow: 0 8px 24px rgba(0, 115, 230, 0.35), 0 2px 8px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 8px 24px rgba(42, 51, 66, 0.35), 0 2px 8px rgba(0, 0, 0, 0.1);
 	}
 	50% {
 		transform: scale(1.05);
-		box-shadow: 0 12px 32px rgba(0, 115, 230, 0.5), 0 4px 12px rgba(0, 0, 0, 0.15);
+		box-shadow: 0 12px 32px rgba(42, 51, 66, 0.5), 0 4px 12px rgba(0, 0, 0, 0.15);
 	}
 }
 
@@ -81,7 +81,7 @@
 }
 
 /* ===========================================
-   Okno chatbota - jasne i czyste
+   Okno chatbota
    =========================================== */
 #pewik-chatbot-window {
 	position: absolute;
@@ -98,7 +98,7 @@
 	flex-direction: column;
 	overflow: hidden;
 	animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-	border: 1px solid rgba(0, 102, 204, 0.15);
+	border: 1px solid rgba(42, 51, 66, 0.15);
 }
 
 @keyframes slideUp {
@@ -113,10 +113,10 @@
 }
 
 /* ===========================================
-   Nagłówek chatbota - jasny gradient
+   Nagłówek chatbota - #2a3342
    =========================================== */
 #pewik-chatbot-header {
-	background: linear-gradient(135deg, #0073e6 0%, #0066cc 100%);
+	background: #2a3342;
 	color: white;
 	padding: 24px 20px;
 	display: flex;
@@ -130,39 +130,8 @@
 	font-size: 18px;
 	font-weight: 700;
 	letter-spacing: -0.3px;
-	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-.chatbot-status {
-	display: flex;
-	align-items: center;
-	margin-top: 6px;
-	font-size: 13px;
-	opacity: 0.95;
-	font-weight: 500;
-}
-
-.chatbot-status::before {
-	content: '';
-	width: 8px;
-	height: 8px;
-	background: #00ff88;
-	border-radius: 50%;
-	margin-right: 6px;
-	box-shadow: 0 0 8px rgba(0, 255, 136, 0.6);
-	animation: pulse-dot 2s infinite;
-}
-
-@keyframes pulse-dot {
-	0%,
-	100% {
-		opacity: 1;
-		transform: scale(1);
-	}
-	50% {
-		opacity: 0.7;
-		transform: scale(1.1);
-	}
+	color: #ffffff;
+	text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 #pewik-chatbot-close {
@@ -190,7 +159,7 @@
 }
 
 /* ===========================================
-   Obszar wiadomości - jasne tło
+   Obszar wiadomości
    =========================================== */
 #pewik-chatbot-messages {
 	flex: 1;
@@ -200,28 +169,28 @@
 	scroll-behavior: smooth;
 }
 
-/* Scrollbar - bardziej widoczny */
+/* Scrollbar */
 #pewik-chatbot-messages::-webkit-scrollbar {
 	width: 8px;
 }
 
 #pewik-chatbot-messages::-webkit-scrollbar-track {
-	background: rgba(0, 102, 204, 0.05);
+	background: rgba(42, 51, 66, 0.05);
 	border-radius: 4px;
 }
 
 #pewik-chatbot-messages::-webkit-scrollbar-thumb {
-	background: rgba(0, 115, 230, 0.4);
+	background: rgba(42, 51, 66, 0.4);
 	border-radius: 4px;
 	transition: background 0.2s;
 }
 
 #pewik-chatbot-messages::-webkit-scrollbar-thumb:hover {
-	background: rgba(0, 115, 230, 0.6);
+	background: rgba(42, 51, 66, 0.6);
 }
 
 /* ===========================================
-   Wiadomości - jasne, czytelne kolory
+   Wiadomości
    =========================================== */
 .message {
 	margin-bottom: 18px;
@@ -247,25 +216,25 @@
 }
 
 .message a {
-	color: #0066cc;
+	color: #2a3342;
 	text-decoration: underline;
 	font-weight: 600;
 	text-underline-offset: 2px;
 }
 
 .message a:hover {
-	color: #0052a3;
+	color: #1a232f;
 	text-decoration-thickness: 2px;
 }
 
 .message code {
-	background: rgba(0, 102, 204, 0.08);
+	background: rgba(42, 51, 66, 0.08);
 	padding: 3px 8px;
 	border-radius: 6px;
 	font-size: 0.92em;
 	font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
-	color: #0066cc;
-	border: 1px solid rgba(0, 102, 204, 0.15);
+	color: #2a3342;
+	border: 1px solid rgba(42, 51, 66, 0.15);
 }
 
 .message strong {
@@ -273,35 +242,35 @@
 	color: inherit;
 }
 
-/* Wiadomość użytkownika - jasny niebieski */
+/* Wiadomość użytkownika - #2a3342 */
 .user-message {
-	background: linear-gradient(135deg, #0073e6 0%, #0066cc 100%);
+	background: #2a3342;
 	color: #ffffff;
 	margin-left: auto;
 	border-bottom-right-radius: 6px;
-	box-shadow: 0 4px 12px rgba(0, 115, 230, 0.25);
+	box-shadow: 0 4px 12px rgba(42, 51, 66, 0.25);
 	font-weight: 500;
 }
 
-/* Wiadomość bota - czyste białe tło */
+/* Wiadomość bota */
 .bot-message {
 	background: #ffffff;
 	color: #1a202c;
 	border-bottom-left-radius: 6px;
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-	border: 2px solid rgba(0, 115, 230, 0.12);
+	border: 2px solid rgba(42, 51, 66, 0.12);
 }
 
-/* Wiadomość powitalna - jasny niebieski akcent */
+/* Wiadomość powitalna */
 .initial-message {
-	background: linear-gradient(135deg, #e3f2fd 0%, #dbeafe 100%);
-	border: 2px solid #0073e6;
+	background: linear-gradient(135deg, #e8edf3 0%, #dfe5ed 100%);
+	border: 2px solid #2a3342;
 	font-weight: 500;
 	color: #1a202c;
-	box-shadow: 0 4px 12px rgba(0, 115, 230, 0.15);
+	box-shadow: 0 4px 12px rgba(42, 51, 66, 0.15);
 }
 
-/* Wiadomość błędu - jasna, czytelna */
+/* Wiadomość błędu */
 .error-message {
 	background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
 	border: 2px solid #f87171;
@@ -310,11 +279,11 @@
 }
 
 /* ===========================================
-   Wskaźnik pisania - jasny i przyjazny
+   Wskaźnik pisania
    =========================================== */
 .typing-indicator {
 	background: #ffffff !important;
-	border: 2px solid rgba(0, 115, 230, 0.12) !important;
+	border: 2px solid rgba(42, 51, 66, 0.12) !important;
 	opacity: 1 !important;
 	color: #64748b;
 	font-weight: 500;
@@ -330,7 +299,7 @@
 	animation: typingDot 1.4s infinite;
 	font-size: 28px;
 	line-height: 0;
-	color: #0073e6;
+	color: #2a3342;
 }
 
 .typing-dots span:nth-child(2) {
@@ -355,24 +324,24 @@
 }
 
 /* ===========================================
-   Cytowania - jasny akcent
+   Cytowania
    =========================================== */
 .citation-indicator {
 	margin-top: 10px;
 	padding-top: 10px;
-	border-top: 2px solid rgba(0, 115, 230, 0.15);
+	border-top: 2px solid rgba(42, 51, 66, 0.15);
 	font-size: 13px;
-	color: #0073e6;
+	color: #2a3342;
 	font-weight: 600;
 }
 
 /* ===========================================
-   Przycisk retry - jasny i wyraźny
+   Przycisk retry
    =========================================== */
 .retry-button {
 	margin: 12px 0;
 	padding: 12px 20px;
-	background: linear-gradient(135deg, #0073e6 0%, #0066cc 100%);
+	background: #2a3342;
 	color: white;
 	border: none;
 	border-radius: 14px;
@@ -380,7 +349,7 @@
 	font-size: 15px;
 	font-weight: 700;
 	transition: all 0.25s;
-	box-shadow: 0 4px 12px rgba(0, 115, 230, 0.3);
+	box-shadow: 0 4px 12px rgba(42, 51, 66, 0.3);
 	width: auto;
 	display: inline-flex;
 	align-items: center;
@@ -389,17 +358,17 @@
 
 .retry-button:hover {
 	transform: translateY(-2px);
-	box-shadow: 0 6px 16px rgba(0, 115, 230, 0.4);
-	background: linear-gradient(135deg, #0080ff 0%, #0073e6 100%);
+	box-shadow: 0 6px 16px rgba(42, 51, 66, 0.4);
+	background: #3d4a5c;
 }
 
 /* ===========================================
-   Pole wprowadzania - jasne i przyjazne
+   Pole wprowadzania
    =========================================== */
 #pewik-chatbot-input-container {
 	padding: 20px;
 	background: #ffffff;
-	border-top: 2px solid rgba(0, 115, 230, 0.1);
+	border-top: 2px solid rgba(42, 51, 66, 0.1);
 	display: flex;
 	gap: 12px;
 	align-items: center;
@@ -426,9 +395,9 @@
 }
 
 #pewik-chatbot-input:focus {
-	border-color: #0073e6;
+	border-color: #2a3342;
 	background: #ffffff;
-	box-shadow: 0 0 0 4px rgba(0, 115, 230, 0.12);
+	box-shadow: 0 0 0 4px rgba(42, 51, 66, 0.12);
 	transform: scale(1.01);
 }
 
@@ -439,7 +408,7 @@
 }
 
 #pewik-chatbot-send {
-	background: linear-gradient(135deg, #0073e6 0%, #0066cc 100%);
+	background: #2a3342;
 	color: white;
 	border: none;
 	padding: 14px;
@@ -451,13 +420,13 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	box-shadow: 0 4px 12px rgba(0, 115, 230, 0.3);
+	box-shadow: 0 4px 12px rgba(42, 51, 66, 0.3);
 }
 
 #pewik-chatbot-send:hover:not(:disabled) {
 	transform: scale(1.1) rotate(15deg);
-	box-shadow: 0 6px 16px rgba(0, 200, 83, 0.4);
-	background: linear-gradient(135deg, #00c853 0%, #00aa44 100%);
+	box-shadow: 0 6px 16px rgba(42, 51, 66, 0.4);
+	background: #3d4a5c;
 }
 
 #pewik-chatbot-send:active:not(:disabled) {
@@ -474,82 +443,82 @@
    PRZYCISKI OCENY
    ======================================== */
 
-   .message-rating {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 12px;
-    padding-top: 10px;
-    border-top: 1px solid rgba(0,0,0,0.05);
-    animation: fadeInRating 0.3s ease-out;
+.message-rating {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 12px;
+	padding-top: 10px;
+	border-top: 1px solid rgba(0, 0, 0, 0.05);
+	animation: fadeInRating 0.3s ease-out;
 }
 
 .rating-label {
-    font-size: 12px;
-    color: #666;
-    margin-right: auto;
+	font-size: 12px;
+	color: #666;
+	margin-right: auto;
 }
 
 .rating-btn {
-    background: white;
-    border: 1px solid #e0e0e0;
-    border-radius: 50%;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.2s;
-    color: #666;
-    padding: 0;
+	background: white;
+	border: 1px solid #e0e0e0;
+	border-radius: 50%;
+	width: 32px;
+	height: 32px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	transition: all 0.2s;
+	color: #666;
+	padding: 0;
 }
 
 .rating-btn:hover:not(:disabled) {
-    transform: scale(1.1);
-    border-color: #667eea;
-    color: #667eea;
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+	transform: scale(1.1);
+	border-color: #2a3342;
+	color: #2a3342;
+	box-shadow: 0 2px 8px rgba(42, 51, 66, 0.2);
 }
 
 .rating-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+	opacity: 0.5;
+	cursor: not-allowed;
 }
 
 .rating-btn.thumbs-up:hover:not(:disabled) {
-    border-color: #46b450;
-    color: #46b450;
-    box-shadow: 0 2px 8px rgba(70, 180, 80, 0.2);
+	border-color: #46b450;
+	color: #46b450;
+	box-shadow: 0 2px 8px rgba(70, 180, 80, 0.2);
 }
 
 .rating-btn.thumbs-down:hover:not(:disabled) {
-    border-color: #dc3232;
-    color: #dc3232;
-    box-shadow: 0 2px 8px rgba(220, 50, 50, 0.2);
+	border-color: #dc3232;
+	color: #dc3232;
+	box-shadow: 0 2px 8px rgba(220, 50, 50, 0.2);
 }
 
 .rating-success {
-    color: #46b450;
-    font-size: 12px;
-    font-weight: 600;
+	color: #46b450;
+	font-size: 12px;
+	font-weight: 600;
 }
 
 .rating-error {
-    color: #dc3232;
-    font-size: 12px;
-    font-weight: 600;
+	color: #dc3232;
+	font-size: 12px;
+	font-weight: 600;
 }
 
 @keyframes fadeInRating {
-    from {
-        opacity: 0;
-        transform: translateY(5px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+	from {
+		opacity: 0;
+		transform: translateY(5px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
 }
 
 /* ===========================================
@@ -582,7 +551,7 @@
 	}
 
 	#pewik-chatbot-input {
-		font-size: 16px; /* Zapobiega zoom na iOS */
+		font-size: 16px;
 	}
 }
 
@@ -610,19 +579,18 @@
 #pewik-chatbot-close:focus-visible,
 #pewik-chatbot-input:focus-visible,
 .retry-button:focus-visible {
-	outline: 4px solid #0073e6;
+	outline: 4px solid #2a3342;
 	outline-offset: 3px;
 }
 
-/* Ułatwienia dla użytkowników z preferencją zwiększonego kontrastu */
 @media (prefers-contrast: high) {
 	.bot-message {
 		border-width: 3px;
-		border-color: #0066cc;
+		border-color: #2a3342;
 	}
 
 	.user-message {
-		background: #0052a3;
+		background: #1a232f;
 	}
 
 	#pewik-chatbot-input {
@@ -630,7 +598,7 @@
 	}
 }
 
-/* Redukcja ruchu dla osób z preferencjami accessibility */
+/* Redukcja ruchu */
 @media (prefers-reduced-motion: reduce) {
 	*,
 	*::before,
@@ -643,19 +611,8 @@
 }
 
 /* ===========================================
-   Logo/Emoji PeWiK w headerze
-   =========================================== */
-#pewik-chatbot-header::before {
-	content: '💧';
-	font-size: 24px;
-	margin-right: 10px;
-	filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
-}
-
-/* ===========================================
    Dodatkowe ulepszenia wizualne
    =========================================== */
-/* Subtelna animacja dla nowych wiadomości */
 @keyframes messageAppear {
 	from {
 		opacity: 0;
@@ -671,21 +628,18 @@
 	animation: messageAppear 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* Hover na wiadomościach - subtelne podświetlenie */
 .bot-message:hover {
-	border-color: rgba(0, 115, 230, 0.25);
-	box-shadow: 0 4px 12px rgba(0, 115, 230, 0.1);
+	border-color: rgba(42, 51, 66, 0.25);
+	box-shadow: 0 4px 12px rgba(42, 51, 66, 0.1);
 }
 
-/* Lepsze wyświetlanie linków w wiadomościach */
 .message a {
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;
 }
 
-/* Ikonka dla zewnętrznych linków */
-.message a[target="_blank"]::after {
+.message a[target='_blank']::after {
 	content: '↗';
 	font-size: 0.85em;
 	opacity: 0.7;

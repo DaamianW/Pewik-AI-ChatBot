@@ -105,12 +105,15 @@
 			}
 		})
 
-		// ✅ NOWE: Obsługa przycisków oceny (delegacja eventów)
 		$(document).on('click', '.rating-btn', handleRatingClick)
 
 		setTimeout(function () {
 			$('#pewik-chatbot-button').addClass('pulse-animation')
 		}, 3000)
+
+		// ✅ NOWE: Twórz sesję w tle od razu po załadowaniu strony
+		log('Tworzę sesję w tle...')
+		ensureValidSession()
 
 		log('Chatbot zainicjalizowany')
 	}

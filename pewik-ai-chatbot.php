@@ -539,14 +539,13 @@ function pewik_chatbot_add_widget() {
             <div id="pewik-chatbot-header">
                 <div>
                     <h3>Asystent PEWIK GDYNIA</h3>
-                    <span class="chatbot-status">Online</span>
                 </div>
                 <button id="pewik-chatbot-close" aria-label="Zamknij czat">×</button>
             </div>
             
             <div id="pewik-chatbot-messages">
                 <div class="message bot-message initial-message">
-                    👋 Witaj! Jestem asystentem PEWIK Gdynia. Mogę pomóc Ci w nawigacji po stronie, znalezieniu formularzy i informacji o usługach. Jak mogę Ci dzisiaj pomóc?
+                Cześć! W czym mogę pomóc? Jestem wirtualnym asystentem, korzystającym z informacji zawartych na stronie. Mogę pomóc Ci w odnalezieniu poszukiwanych informacji.
                 </div>
             </div>
             
