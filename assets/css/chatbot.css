@@ -134,28 +134,61 @@
 	text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
+.chatbot-header-actions {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+#pewik-chatbot-reset,
 #pewik-chatbot-close {
 	background: rgba(255, 255, 255, 0.15);
 	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
 	border: 2px solid rgba(255, 255, 255, 0.2);
 	color: white;
-	font-size: 24px;
 	cursor: pointer;
 	padding: 0;
-	width: 40px;
-	height: 40px;
+	width: 36px;
+	height: 36px;
 	border-radius: 50%;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	transition: all 0.25s;
+	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	line-height: 1;
-	font-weight: 300;
+	flex-shrink: 0;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+#pewik-chatbot-reset svg,
+#pewik-chatbot-close svg {
+	width: 20px;
+	height: 20px;
+	stroke-width: 2.5;
+	transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#pewik-chatbot-reset:hover,
 #pewik-chatbot-close:hover {
-	background: rgba(255, 255, 255, 0.25);
-	transform: rotate(90deg) scale(1.05);
+	background: rgba(255, 255, 255, 0.3);
+	border-color: rgba(255, 255, 255, 0.4);
+	transform: scale(1.1);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+#pewik-chatbot-reset:active,
+#pewik-chatbot-close:active {
+	transform: scale(0.95);
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+#pewik-chatbot-reset:hover svg {
+	transform: rotate(-360deg);
+}
+
+#pewik-chatbot-close:hover svg {
+	transform: rotate(90deg);
 }
 
 /* ===========================================
@@ -215,15 +248,34 @@
 	}
 }
 
-.message a {
+/* Default link styles for user messages */
+.user-message a {
 	color: #2a3342;
 	text-decoration: underline;
 	font-weight: 600;
 	text-underline-offset: 2px;
 }
 
-.message a:hover {
+.user-message a:hover {
 	color: #1a232f;
+	text-decoration-thickness: 2px;
+}
+
+/* Pastel link styles for bot messages */
+.bot-message a {
+	color: #a78bfa;
+	text-decoration: underline;
+	font-weight: 600;
+	text-underline-offset: 2px;
+	transition: all 0.2s ease;
+}
+
+.bot-message a:visited {
+	color: #a78bfa;
+}
+
+.bot-message a:hover {
+	color: #8b5cf6;
 	text-decoration-thickness: 2px;
 }
 
@@ -557,8 +609,28 @@
 
 /* Bardzo małe ekrany */
 @media (max-width: 380px) {
+	#pewik-chatbot-header {
+		padding: 18px 16px;
+	}
+
 	#pewik-chatbot-header h3 {
-		font-size: 16px;
+		font-size: 15px;
+	}
+
+	.chatbot-header-actions {
+		gap: 6px;
+	}
+
+	#pewik-chatbot-reset,
+	#pewik-chatbot-close {
+		width: 32px;
+		height: 32px;
+	}
+
+	#pewik-chatbot-reset svg,
+	#pewik-chatbot-close svg {
+		width: 18px;
+		height: 18px;
 	}
 
 	#pewik-chatbot-input {
@@ -576,6 +648,7 @@
    =========================================== */
 #pewik-chatbot-button:focus-visible,
 #pewik-chatbot-send:focus-visible,
+#pewik-chatbot-reset:focus-visible,
 #pewik-chatbot-close:focus-visible,
 #pewik-chatbot-input:focus-visible,
 .retry-button:focus-visible {

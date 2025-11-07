@@ -21,12 +21,20 @@
 	function log(message, data = null) {
 		if (!DEBUG) return
 		const timestamp = new Date().toISOString().split('T')[1].slice(0, -1)
-		console.log(`[${timestamp}] [PEWIK Chatbot] ${message}`, data || '')
+		if (data !== null && data !== undefined) {
+			console.log(`[${timestamp}] [PEWIK Chatbot] ${message}`, data)
+		} else {
+			console.log(`[${timestamp}] [PEWIK Chatbot] ${message}`)
+		}
 	}
 
 	function logError(message, error = null) {
 		const timestamp = new Date().toISOString().split('T')[1].slice(0, -1)
-		console.error(`[${timestamp}] [PEWIK Chatbot ERROR] ${message}`, error || '')
+		if (error !== null && error !== undefined) {
+			console.error(`[${timestamp}] [PEWIK Chatbot ERROR] ${message}`, error)
+		} else {
+			console.error(`[${timestamp}] [PEWIK Chatbot ERROR] ${message}`)
+		}
 	}
 
 	$(document).ready(function () {
@@ -34,10 +42,11 @@
 		log('Session ID z localStorage:', sessionId)
 
 		initializeChatbot()
-		checkSessionValidity()
 
-		if (sessionId) {
-			loadPreviousMessages()
+		// Sprawdź ważność sesji tylko lokalnie (bez tworzenia nowej)
+		if (sessionId && !checkSessionValidity()) {
+			log('Sesja w localStorage jest nieważna, czyszczenie...')
+			clearSession()
 		}
 	})
 
@@ -89,6 +98,7 @@
 	function initializeChatbot() {
 		$('#pewik-chatbot-button').on('click', toggleChat)
 		$('#pewik-chatbot-close').on('click', closeChat)
+		$('#pewik-chatbot-reset').on('click', resetConversation)
 		$('#pewik-chatbot-send').on('click', handleSendMessage)
 
 		$('#pewik-chatbot-input').on('keypress', function (e) {
@@ -111,10 +121,6 @@
 			$('#pewik-chatbot-button').addClass('pulse-animation')
 		}, 3000)
 
-		// ✅ NOWE: Twórz sesję w tle od razu po załadowaniu strony
-		log('Tworzę sesję w tle...')
-		ensureValidSession()
-
 		log('Chatbot zainicjalizowany')
 	}
 
@@ -125,11 +131,20 @@
 			const savedMessages = localStorage.getItem(STORAGE_MESSAGES_KEY)
 			if (savedMessages) {
 				const messages = JSON.parse(savedMessages)
+
+				// Sprawdź czy są już jakieś wiadomości (poza powitalną)
+				const currentMessages = $('#pewik-chatbot-messages .message').not('.initial-message')
+				if (currentMessages.length > 0) {
+					log('Wiadomości już załadowane, pomijam')
+					return
+				}
+
 				log(`Ładuję ${messages.length} poprzednich wiadomości`)
-				$('#pewik-chatbot-messages').empty()
+
+				// Usuń tylko wiadomość powitalną, jeśli istnieje
+				$('#pewik-chatbot-messages .initial-message').remove()
 
 				messages.forEach(function (msg) {
-					// ✅ POPRAWKA: Przekaż messageId jeśli istnieje
 					addMessageToUI(msg.type, msg.text, false, msg.messageId || null)
 				})
 				scrollToBottom()
@@ -180,28 +195,53 @@
 		$('#pewik-chatbot-window').fadeIn(300)
 		$('#pewik-chatbot-button').addClass('active')
 		$('#pewik-chatbot-input').focus()
+
+		// Załaduj poprzednie wiadomości jeśli sesja istnieje
+		if (sessionId && checkSessionValidity()) {
+			loadPreviousMessages()
+		}
+
 		scrollToBottom()
 
+		// Utwórz sesję tylko jeśli nie istnieje lub jest nieważna
 		ensureValidSession()
 	}
 
 	function closeChat() {
 		chatOpen = false
-		log('Zamykanie chatbota i czyszczenie sesji')
+		log('Zamykanie chatbota (sesja i historia zachowane)')
 
 		$('#pewik-chatbot-window').fadeOut(300)
 		$('#pewik-chatbot-button').removeClass('active')
 
+		// NIE czyścimy sesji - zostaje zachowana przez SESSION_TIMEOUT (10 minut)
+		// NIE czyścimy wiadomości - użytkownik zobaczy historię przy ponownym otwarciu
+	}
+
+	function resetConversation() {
+		log('=== RESETOWANIE KONWERSACJI ===')
+
+		// Wyczyść sesję i historię
 		clearSession()
 		localStorage.removeItem(STORAGE_MESSAGES_KEY)
+		messageCounter = 0
 
+		// Wyczyść UI
 		$('#pewik-chatbot-messages').html(`
 			<div class="message bot-message initial-message">
 				Cześć! W czym mogę pomóc? Jestem wirtualnym asystentem, korzystającym z informacji zawartych na stronie. Mogę pomóc Ci w odnalezieniu poszukiwanych informacji.
 			</div>
 		`)
 
-		log('Sesja i historia wyczyszczone')
+		// Zresetuj input
+		$('#pewik-chatbot-input').val('').prop('disabled', false)
+		$('#pewik-chatbot-send').prop('disabled', false)
+		isWaiting = false
+
+		log('Konwersacja zresetowana, tworzę nową sesję...')
+
+		// Utwórz nową sesję
+		ensureValidSession()
 	}
 
 	async function ensureValidSession() {
@@ -347,7 +387,7 @@
 				log('Wysyłam request do API...')
 			},
 			success: function (response) {
-				log('Odpowiedź z API:', response)
+				// Nie logujemy tutaj - handleAPISuccess to zrobi
 				handleAPISuccess(response, message, retryCount)
 			},
 			error: function (xhr, status, error) {
@@ -370,7 +410,7 @@
 	}
 
 	function handleAPISuccess(response, originalMessage, retryCount) {
-		log('=== Handle API Success ===')
+		log('=== Odpowiedź z API ===')
 		log('Response:', response)
 
 		if (response.session_expired || response.code === 404) {

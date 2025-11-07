@@ -453,9 +453,9 @@ function pewik_chatbot_handle_message($request) {
         );
     }
     
-    // Rate limiting - max 30 wiadomości na godzinę z jednego IP
+    // Rate limiting - max 60 wiadomości na godzinę z jednego IP (pomiń dla localhost)
     $user_ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
-    if (!pewik_chatbot_check_rate_limit($user_ip)) {
+    if ($user_ip !== '127.0.0.1' && $user_ip !== '::1' && !pewik_chatbot_check_rate_limit($user_ip)) {
         return new WP_Error(
             'rate_limit_exceeded',
             'Przekroczono limit wiadomości. Spróbuj ponownie za godzinę.',
@@ -510,11 +510,11 @@ function pewik_chatbot_reset_session($request) {
 function pewik_chatbot_check_rate_limit($user_ip) {
     $transient_key = 'pewik_chatbot_rate_' . md5($user_ip);
     $count = get_transient($transient_key);
-    
-    if ($count && $count >= 30) {
+
+    if ($count && $count >= 60) {
         return false;
     }
-    
+
     set_transient($transient_key, ($count ? $count + 1 : 1), HOUR_IN_SECONDS);
     return true;
 }
@@ -540,7 +540,20 @@ function pewik_chatbot_add_widget() {
                 <div>
                     <h3>Asystent PEWIK GDYNIA</h3>
                 </div>
-                <button id="pewik-chatbot-close" aria-label="Zamknij czat">×</button>
+                <div class="chatbot-header-actions">
+                    <button id="pewik-chatbot-reset" aria-label="Nowa konwersacja" title="Rozpocznij nową konwersację">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="1 4 1 10 7 10"></polyline>
+                            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                        </svg>
+                    </button>
+                    <button id="pewik-chatbot-close" aria-label="Zamknij czat" title="Zamknij czat">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
             </div>
             
             <div id="pewik-chatbot-messages">
