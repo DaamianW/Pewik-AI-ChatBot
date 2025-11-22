@@ -444,6 +444,7 @@ function pewik_chatbot_rate_message($request) {
 function pewik_chatbot_handle_message($request) {
     $user_message = $request->get_param('message');
     $session_id = $request->get_param('sessionId');
+    $context = $request->get_param('context');
     
     if (empty($user_message)) {
         return new WP_Error(
@@ -471,7 +472,7 @@ function pewik_chatbot_handle_message($request) {
             $session_id = $chatbot->create_session();
         }
         
-        $response = $chatbot->send_message($user_message, $session_id);
+        $response = $chatbot->send_message($user_message, $session_id, $context);
         
         // Loguj wiadomości (opcjonalnie)
         if (defined('WP_DEBUG') && WP_DEBUG) {
@@ -1306,6 +1307,26 @@ function pewik_chatbot_ratings_page() {
                     html += '<div class="detail-label">🤖 Odpowiedź bota:</div>';
                     html += '<div class="detail-value">' + data.bot_response + '</div>';
                     html += '</div>';
+
+                    try {
+                        const meta = typeof data.metadata === 'string' ? JSON.parse(data.metadata) : data.metadata;
+                        if (meta && meta.citations && meta.citations.length > 0) {
+                            html += '<div class="detail-row">';
+                            html += '<div class="detail-label">📚 Źródła (Citations):</div>';
+                            html += '<div class="detail-value" style="font-size: 12px;">';
+                            meta.citations.forEach(function(cit, index) {
+                                var url = cit.sourceLocation ? cit.sourceLocation.url : 'Dokument bez nazwy';
+                                var text = cit.sourceText ? cit.sourceText.substring(0, 100) + '...' : '';
+                                html += '<div style="margin-bottom: 8px; border-bottom: 1px solid #ddd; padding-bottom: 4px;">';
+                                html += '<strong>' + (index + 1) + '. ' + url + '</strong><br>';
+                                html += '<em style="color: #666;">"' + text + '"</em>';
+                                html += '</div>';
+                            });
+                            html += '</div></div>';
+                        }
+                    } catch (e) {
+                        console.error('Błąd parsowania metadanych', e);
+                    }
                     
                     html += '<div class="detail-row">';
                     html += '<div class="detail-label">⭐ Ocena:</div>';

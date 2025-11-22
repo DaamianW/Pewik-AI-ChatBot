@@ -370,9 +370,15 @@
 		log('Message:', message)
 		log('Retry count:', retryCount)
 
+		const contextData = {
+			pageTitle: document.title,
+			pageUrl: window.location.href,
+		}
+
 		const requestData = {
 			message: message,
 			sessionId: sessionId,
+			context: contextData,
 		}
 
 		log('Request data:', requestData)

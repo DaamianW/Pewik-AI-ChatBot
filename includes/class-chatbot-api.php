@@ -135,7 +135,7 @@ class PEWIK_Chatbot_API {
      * @return array Odpowiedź z wiadomością bota i session ID
      * @throws Exception
      */
-    public function send_message($user_message, $session_id) {
+    public function send_message($user_message, $session_id, $context = null) {
     
         $start_time = microtime(true); // Timer na początku
     
@@ -145,10 +145,20 @@ class PEWIK_Chatbot_API {
         
         $path = '/20240531/agentEndpoints/' . $this->agent_endpoint_id . '/actions/chat';
         $full_url = $this->endpoint_url . $path;
+
+        $final_message = $user_message;
+        
+        if ($context && is_array($context)) {
+            $page_title = isset($context['pageTitle']) ? $context['pageTitle'] : '';
+            $page_url = isset($context['pageUrl']) ? $context['pageUrl'] : '';
+            
+            // Doklejamy instrukcję systemową niewidoczną dla użytkownika
+            $final_message .= "\n\n[SYSTEM_CONTEXT: Użytkownik przegląda stronę: '{$page_title}' (URL: {$page_url}). Jeśli pytanie jest niejasne, wykorzystaj ten kontekst do udzielenia precyzyjnej odpowiedzi.]";
+        }
         
         // Przygotuj body - sessionId jest ZAWSZE wymagany
         $request_body = array(
-            'userMessage' => $user_message,
+            'userMessage' => $final_message,
             'sessionId' => $session_id,
             'shouldStream' => false
         );
