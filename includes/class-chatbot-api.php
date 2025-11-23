@@ -1,421 +1,385 @@
 <?php
 /**
- * Klasa do komunikacji z Oracle Generative AI Agent
- * Obsługuje wysyłanie wiadomości, zarządzanie sesjami i wyciąganie odpowiedzi
+ * Klasa do komunikacji z OCI Generative AI (Model Cohere Command R+)
+ * Architektura: Hard Rules (PHP) + Local RAG + OCI Inference
+ * Wersja: EXPERT (Z dodatkową wiedzą o Jakości Wody i Kanalizacji)
  */
 
 if (!defined('ABSPATH')) exit;
 
 class PEWIK_Chatbot_API {
     private $signer;
-    private $endpoint_url;
-    private $agent_endpoint_id;
-    private $region;
+    private $inference_endpoint;
+    private $compartment_id;
+    private $model_id;
     
+    // PROTOKÓŁ POWITANIA
+    const MANDATORY_GREETING = "Cześć! W czym mogę pomóc? Jestem wirtualnym asystentem, korzystającym z informacji zawartych na stronie. Mogę pomóc Ci w odnalezieniu poszukiwanych informacji.";
+
     public function __construct() {
-        error_log('[PEWIK Chatbot API] === Konstruktor wywołany ===');
-        
         $this->signer = new PEWIK_OCI_Request_Signer();
-        $this->agent_endpoint_id = PEWIK_AGENT_ENDPOINT_ID;
-        $this->region = PEWIK_REGION;
         
-        // URL endpointu dla regionu eu-frankfurt-1
-        $this->endpoint_url = 'https://agent-runtime.generativeai.' . $this->region . '.oci.oraclecloud.com';
+        // ⬇️ WAŻNE: UZUPEŁNIJ SWOIM COMPARTMENT OCID (tym samym co w Pythonie)
+        $this->compartment_id = "ocid1.tenancy.oc1..aaaaaaaahakj6sqsxfouv57essllobaj4euh6e24mxa2ab7i6ktjuju4fxiq"; 
         
-        error_log('[PEWIK Chatbot API] Region: ' . $this->region);
-        error_log('[PEWIK Chatbot API] Endpoint URL: ' . $this->endpoint_url);
-        error_log('[PEWIK Chatbot API] Agent Endpoint ID: ' . $this->agent_endpoint_id);
+        // Model ID: Cohere Command R+
+        $this->model_id = 'ocid1.generativeaimodel.oc1.eu-frankfurt-1.amaaaaaask7dceyabdu6rjjmg75pixtecqvjen4x4st4mhs2a4zzfx5cgkmq';
+        
+        // Endpoint Generative AI we Frankfurcie
+        $this->inference_endpoint = 'https://inference.generativeai.eu-frankfurt-1.oci.oraclecloud.com/20231130/actions/chat';
     }
-    
+
     /**
-     * Pobierz informacje o regionie
-     */
-    public function get_region_info() {
-        return array(
-            'region' => $this->region,
-            'endpoint_url' => $this->endpoint_url,
-            'agent_endpoint_id' => $this->agent_endpoint_id
-        );
-    }
-    
-    /**
-     * Utwórz nową sesję Oracle AI Agent
-     * 
-     * @return string Session ID
-     * @throws Exception
-     */
-    public function create_session() {
-        error_log('[PEWIK Chatbot API] === Rozpoczynam tworzenie sesji ===');
-        
-        $path = '/20240531/agentEndpoints/' . $this->agent_endpoint_id . '/sessions';
-        $full_url = $this->endpoint_url . $path;
-        
-        error_log('[PEWIK Chatbot API] Full URL: ' . $full_url);
-        
-        $body = json_encode(array(
-            'displayName' => 'WordPress Session - ' . date('Y-m-d H:i:s'),
-            'description' => 'PEWIK Chatbot session from WordPress'
-        ));
-        
-        error_log('[PEWIK Chatbot API] Request body: ' . $body);
-        
-        try {
-            error_log('[PEWIK Chatbot API] Podpisuję request...');
-            
-            // Podpisz request
-            $headers = $this->signer->sign_request('POST', $full_url, array(), $body);
-            
-            error_log('[PEWIK Chatbot API] Request podpisany. Liczba nagłówków: ' . count($headers));
-            
-            // Formatuj nagłówki dla WordPress HTTP API
-            $wp_headers = $this->format_headers_for_wp($headers);
-            
-            error_log('[PEWIK Chatbot API] Wysyłam POST request do Oracle...');
-            
-            // Wyślij zapytanie
-            $response = wp_remote_post($full_url, array(
-                'headers' => $wp_headers,
-                'body' => $body,
-                'timeout' => 30,
-                'sslverify' => true,
-                'httpversion' => '1.1'
-            ));
-            
-            error_log('[PEWIK Chatbot API] Otrzymano odpowiedź');
-            
-            if (is_wp_error($response)) {
-                $error_msg = $response->get_error_message();
-                error_log('[PEWIK Chatbot API ERROR] WP Error: ' . $error_msg);
-                throw new Exception('Błąd tworzenia sesji: ' . $error_msg);
-            }
-            
-            $response_code = wp_remote_retrieve_response_code($response);
-            $response_body = wp_remote_retrieve_body($response);
-            
-            error_log('[PEWIK Chatbot API] Response code: ' . $response_code);
-            error_log('[PEWIK Chatbot API] Response body (first 500 chars): ' . substr($response_body, 0, 500));
-            
-            if ($response_code !== 200 && $response_code !== 201) {
-                error_log('[PEWIK Chatbot API ERROR] Nieprawidłowy kod odpowiedzi: ' . $response_code);
-                throw new Exception('Błąd API przy tworzeniu sesji (kod ' . $response_code . '): ' . $response_body);
-            }
-            
-            $data = json_decode($response_body, true);
-            
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                error_log('[PEWIK Chatbot API ERROR] JSON parse error: ' . json_last_error_msg());
-                throw new Exception('Błąd parsowania JSON: ' . json_last_error_msg());
-            }
-            
-            error_log('[PEWIK Chatbot API] JSON zdekodowany. Struktura: ' . print_r(array_keys($data), true));
-            
-            $session_id = $data['id'] ?? $data['sessionId'] ?? null;
-            
-            if (empty($session_id)) {
-                error_log('[PEWIK Chatbot API ERROR] Brak session ID w odpowiedzi. Pełna odpowiedź: ' . print_r($data, true));
-                throw new Exception('Nie otrzymano session ID z Oracle');
-            }
-            
-            error_log('[PEWIK Chatbot API] ✓ Sesja utworzona pomyślnie! Session ID: ' . $session_id);
-            
-            return $session_id;
-            
-        } catch (Exception $e) {
-            error_log('[PEWIK Chatbot API ERROR] Exception: ' . $e->getMessage());
-            error_log('[PEWIK Chatbot API ERROR] Stack trace: ' . $e->getTraceAsString());
-            throw $e;
-        }
-    }
-    
-    /**
-     * Wyślij wiadomość do Oracle AI Agent
-     * 
-     * @param string $user_message Wiadomość użytkownika
-     * @param string $session_id ID sesji (wymagany)
-     * @return array Odpowiedź z wiadomością bota i session ID
-     * @throws Exception
+     * Główna metoda obsługi wiadomości
      */
     public function send_message($user_message, $session_id, $context = null) {
-    
-        $start_time = microtime(true); // Timer na początku
-    
-        if (empty($session_id)) {
-            throw new Exception('Session ID jest wymagany');
-        }
+        $start_time = microtime(true);
         
-        $path = '/20240531/agentEndpoints/' . $this->agent_endpoint_id . '/actions/chat';
-        $full_url = $this->endpoint_url . $path;
-
-        $final_message = $user_message;
+        // ---------------------------------------------------------
+        // 1. HARD RULES - BEZPIECZNIKI PHP (Działają ZAWSZE)
+        // ---------------------------------------------------------
         
-        if ($context && is_array($context)) {
-            $page_title = isset($context['pageTitle']) ? $context['pageTitle'] : '';
-            $page_url = isset($context['pageUrl']) ? $context['pageUrl'] : '';
-            
-            // Doklejamy instrukcję systemową niewidoczną dla użytkownika
-            $final_message .= "\n\n[SYSTEM_CONTEXT: Użytkownik przegląda stronę: '{$page_title}' (URL: {$page_url}). Jeśli pytanie jest niejasne, wykorzystaj ten kontekst do udzielenia precyzyjnej odpowiedzi.]";
-        }
-        
-        // Przygotuj body - sessionId jest ZAWSZE wymagany
-        $request_body = array(
-            'userMessage' => $final_message,
-            'sessionId' => $session_id,
-            'shouldStream' => false
-        );
-        
-        $body_json = json_encode($request_body);
-        
-        // Podpisz request
-        $headers = $this->signer->sign_request('POST', $full_url, array(), $body_json);
-        
-        // Formatuj nagłówki dla WordPress HTTP API
-        $wp_headers = $this->format_headers_for_wp($headers);
-        
-        // Wyślij zapytanie przez WordPress HTTP API
-        $response = wp_remote_post($full_url, array(
-            'headers' => $wp_headers,
-            'body' => $body_json,
-            'timeout' => 45,
-            'sslverify' => true,
-            'httpversion' => '1.1'
-        ));
-        
-        // Obsługa błędów WordPress HTTP API
-        if (is_wp_error($response)) {
-            $error_message = $response->get_error_message();
-            
-            // Loguj błąd jeśli debug jest włączony
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('[PEWIK Chatbot API Error] ' . $error_message);
-            }
-            
-            return array(
-                'error' => true,
-                'message' => 'Błąd połączenia z Oracle Cloud: ' . $error_message
+        // AWARIE (Priorytet absolutny)
+        if ($this->is_emergency($user_message)) {
+            return $this->build_response(
+                "🛑 **STOP! To jest sprawa wymagająca natychmiastowej interwencji.**\n\n" .
+                "W przypadku awarii natychmiast zadzwoń pod bezpłatny numer alarmowy **994**!\n\n" .
+                "Wszelkie zgłoszenia tutaj nie są realizowane. Więcej informacji: [AWARIE](https://pewik.gdynia.pl/awarie).",
+                $session_id,
+                $start_time
             );
         }
+
+        // DANE OSOBOWE (Blokada RODO)
+        if ($this->is_sensitive_data($user_message)) {
+             return $this->build_response(
+                "🛑 **Zatrzymaj się!** Nie podawaj mi swoich danych osobowych (imienia, nazwiska, adresu, numeru umowy).\n\n" .
+                "Jestem wirtualnym asystentem i nie przetwarzam takich danych. Mogę pomóc Ci znaleźć formularz do zmiany danych.",
+                $session_id,
+                $start_time
+            );
+        }
+
+        // POWITANIE (Sztywny protokół)
+        if ($this->is_greeting($user_message)) {
+            return $this->build_response(
+                self::MANDATORY_GREETING,
+                $session_id,
+                $start_time
+            );
+        }
+
+        // ---------------------------------------------------------
+        // 2. DOBÓR WIEDZY (Local RAG w PHP)
+        // ---------------------------------------------------------
+        $knowledge_context = $this->get_knowledge_context($user_message, $context);
+
+        // ---------------------------------------------------------
+        // 3. ZAPYTANIE DO COHERE COMMAND R+ (Przez OCI)
+        // ---------------------------------------------------------
+        try {
+            $bot_response = $this->call_cohere_model($user_message, $knowledge_context);
+            return $this->build_response($bot_response, $session_id, $start_time);
+            
+        } catch (Exception $e) {
+            error_log('[PEWIK AI CRITICAL ERROR] ' . $e->getMessage());
+            
+            // Fallback
+            return $this->build_response(
+                "Przepraszam, wystąpił problem z połączeniem z serwerem AI. Proszę spróbować później lub napisać na bok@pewik.gdynia.pl.",
+                $session_id,
+                $start_time,
+                true
+            );
+        }
+    }
+
+    /**
+     * Wykrywanie awarii (Słowa kluczowe)
+     */
+    private function is_emergency($text) {
+        $keywords = ['awaria', 'brak wody', 'nie mam wody', 'wyciek', 'leje się', 'rura pękła', '994', 'zalanie', 'niedrożna', 'wybija'];
+        $text_lower = mb_strtolower($text);
+        foreach ($keywords as $word) {
+            if (strpos($text_lower, $word) !== false) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Wykrywanie danych osobowych
+     */
+    private function is_sensitive_data($text) {
+        $keywords = ['nazywam się', 'mieszkam przy', 'mój pesel', 'nr umowy', 'numer umowy'];
+        $text_lower = mb_strtolower($text);
+        foreach ($keywords as $word) {
+            if (strpos($text_lower, $word) !== false) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Wykrywanie powitania
+     */
+    private function is_greeting($text) {
+        $greetings = ['cześć', 'czesc', 'cze', 'hej', 'hejka', 'witam', 'siema', 'siemanko', 'elo', 'dzień dobry', 'dzien dobry', 'start', 'halo'];
         
-        // Pobierz kod odpowiedzi i body
+        // Usuwamy znaki interpunkcyjne
+        $clean_text = str_replace(['!', '.', ','], '', mb_strtolower(trim($text)));
+        
+        if (in_array($clean_text, $greetings)) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Mechanizm doboru wiedzy (Przeniesiony z Pythona - Wersja EXPERT)
+     */
+    private function get_knowledge_context($message, $page_context) {
+        $msg = mb_strtolower($message);
+        $url = isset($page_context['pageUrl']) ? strtolower($page_context['pageUrl']) : '';
+        
+        $content = "";
+
+        // 1. WYKLUCZENIA (Ciepła woda, Awarie domowe)
+        if ($this->contains_any($msg, ['ciepł', 'zimn', 'grzeje', 'kaloryfer', 'kran', 'zlew', 'wanna', 'toaleta', 'spłuczka', 'rura', 'hydraulik', 'sąsiad', 'zalewa', 'awari'])) {
+            $content .= "
+TEMAT: ZAKRES ODPOWIEDZIALNOŚCI (CIEPŁA WODA I AWARIE DOMOWE)
+ZASADA: PEWIK Gdynia dostarcza TYLKO ZIMNĄ WODĘ i odpowiada za sieć miejską.
+- Brak ciepłej wody: To awaria po stronie dostawcy ciepła (OPEC) lub Twojej Spółdzielni/Administratora. Nie zgłaszaj tego do PEWIK.
+- Cieknący kran, spłuczka, rura w ścianie (w mieszkaniu): To awaria instalacji wewnętrznej. PEWIK tego nie naprawia. Wezwij hydraulika lub zgłoś Zarządcy.
+- Gwarantowane ciśnienie wody: min. 0,2 MPa. Słabsze ciśnienie w kranie to zazwyczaj problem instalacji w budynku (np. zapchane sitka), a nie sieci.
+- Link: [Zakres odpowiedzialności](https://pewik.gdynia.pl/strefa-klienta/zalatwianie-spraw/awarie-i-uszkodzenia/)
+";
+        }
+
+        // 2. PLANOWANE WYŁĄCZENIA I POWIADOMIENIA
+        if ($this->contains_any($msg, ['wyłącz', 'brak wody', 'kiedy', 'planowan', 'sms', 'powiadom', 'nie ma wody'])) {
+            $content .= "
+TEMAT: PLANOWANE WYŁĄCZENIA I POWIADOMIENIA
+- Gdzie sprawdzić braki wody? Na bieżąco na stronie: [Planowane wyłączenia](https://pewik.gdynia.pl/awarie/planowane-wylaczenia/).
+- Powiadomienia SMS: Oferujemy bezpłatną usługę SMS o awariach i planowanych pracach. 
+  Zapisz się tutaj: [Formularz SMS](https://app.bluealert.pl/pewikgdynia/users/simple-register/).
+";
+        }
+
+        // 3. JAKOŚĆ WODY
+        if ($this->contains_any($msg, ['jakość', 'tward', 'kamień', 'ph', 'skład', 'pić', 'kranówk', 'smak', 'kolor'])) {
+            $content .= "
+TEMAT: JAKOŚĆ WODY I PARAMETRY
+Woda dostarczana przez PEWIK spełnia wszystkie normy sanitarne i nadaje się do picia z kranu.
+Średnie parametry wody w Gdyni:
+- Twardość: 60-500 mg/l CaCO3 (woda średniotwarda lub twarda).
+- Odczyn pH: 6,5 – 9,5.
+- Żelazo: poniżej 200 μg/l.
+- Mętność: poniżej 1,0 NTU.
+Szczegółowe komunikaty o jakości: [Jakość Wody](https://pewik.gdynia.pl/strefa-mieszkanca/jakosc-wody/).
+";
+        }
+
+        // 4. KANALIZACJA - CZEGO NIE WRZUCAĆ
+        if ($this->contains_any($msg, ['toalet', 'wrzuca', 'śmieci', 'zator', 'zapcha', 'olej', 'chustecz'])) {
+            $content .= "
+TEMAT: ZASADY KORZYSTANIA Z KANALIZACJI (Czego nie wrzucać)
+Aby uniknąć zatorów, do toalety NIGDY nie wrzucaj:
+- Artykułów higienicznych: nawilżanych chusteczek (nie rozpuszczają się!), patyczków do uszu, podpasek, wacików.
+- Tłuszczów i olejów: Tężeją w rurach jak beton. Zlej olej do słoika i wyrzuć do śmieci.
+- Resztek jedzenia: Wyrzuć do bio lub kompostownika.
+- Materiałów budowlanych: Farby, gips, lakiery.
+";
+        }
+
+        // 5. WNIOSKI, FORMULARZE (Pełna lista)
+        if ($this->contains_any($msg, ['wniosek', 'przyłącz', 'formularz', 'numer', 'przepis', 'właściciel', 'nazwisko', 'małżeństwo', 'dane', 'umow', 'budow', 'projekt', 'odbiór']) || strpos($url, 'wnioski') !== false) {
+            $content .= "
+TEMAT: WNIOSKI I FORMULARZE (Pełna lista)
+Strona z wnioskami: [https://pewik.gdynia.pl/wnioski](https://pewik.gdynia.pl/wnioski)
+
+A. PRZYŁĄCZENIE DO SIECI:
+- Wniosek nr 1: O sprawdzenie MOŻLIWOŚCI przyłączenia.
+- Wniosek nr 2: O wydanie WARUNKÓW technicznych.
+- Wniosek nr 3: Uzgodnienie projektu.
+- Wniosek nr 4: Wykonanie włączenia / kontrola przyłącza.
+- Wniosek nr 5: Protokół odbioru przyłącza.
+- Wniosek nr 7: Zmiana lokalizacji wodomierza / warunków.
+
+B. UMOWY I DANE:
+- Wniosek nr 10: Nowa umowa / Przepisanie licznika (dołącz Załącznik nr 1 - Protokół).
+  * WAŻNE: Do wniosku nr 10 NIE musisz dołączać aktu notarialnego ani dokumentu własności. Wystarczy sam wniosek i Protokół.
+- Wniosek nr 11: Rozwiązanie umowy.
+- Wniosek nr 18: Zmiana danych (nazwisko, adres).
+
+C. WODOMIERZE LOKALOWE I OGRODOWE:
+- Wniosek nr 21: Warunki dla wodomierzy lokalowych (składa Zarządca).
+- Wniosek nr 22: Kontrola montażu wodomierzy lokalowych.
+- Wniosek nr 23: Wodomierz OGRODOWY (podlicznik) - kontrola montażu.
+
+D. USŁUGI DODATKOWE:
+- Wniosek nr 24: Zlecenie usługi nietaryfowej.
+- Wniosek nr 26: Kopie map/dokumentacji archiwalnej.
+- Wniosek nr 27: Pobór wody z hydrantu.
+";
+        }
+
+        // 6. CENY, FAKTURY, PŁATNOŚCI
+        if ($this->contains_any($msg, ['cen', 'koszt', 'taryf', 'faktur', 'płatnoś', 'ile płacę', 'rachun', 'korekt', 'błąd', 'reklamac', 'wezwan', 'windykac', 'ryczałt', 'samofakturowan', 'polecenie zapłaty'])) {
+            $content .= "
+TEMAT: FINANSE I ROZLICZENIA
+- Cennik: Nie podawaj kwot! Prawidłowy link to: [CENY I TARYFY](https://pewik.gdynia.pl/ceny). (Użyj dokładnie tego linku!).
+- e-BOK: Wszystkie faktury są tu: [e-BOK](https://pewik.gdynia.pl/ebok).
+- Korekta/Błąd na fakturze: Nie trzeba wniosku. Napisz e-mail na bok@pewik.gdynia.pl (podaj nr faktury i stan licznika).
+- Reklamacja: Wniosek nr 15 lub e-mail. Termin odpowiedzi: 30 dni.
+- Wezwanie do zapłaty: Faktura źródłowa jest w e-BOK.
+- Polecenie zapłaty: Wniosek nr 12 (start), Wniosek nr 13 (stop).
+- Rozliczenie Rzeczywiste (Samofakturowanie): [Jak aktywować](https://pewik.gdynia.pl/strefa-klienta/zalatwianie-spraw/sf/).
+";
+        }
+
+        // 7. WODOMIERZE, ODCZYTY, OGRÓD
+        if ($this->contains_any($msg, ['licznik', 'wodomierz', 'odczyt', 'stan', 'ogród', 'ogrodow', 'podlewa', 'trawnik', 'legalizac', 'wymian', 'zamarz', 'sms'])) {
+            $content .= "
+TEMAT: WODOMIERZE I ODCZYTY
+- Podanie odczytu: 4 sposoby:
+  1. Przez stronę [e-Odczyt](https://pewik.gdynia.pl/e-odczyt).
+  2. Przez konto [e-BOK](https://pewik.gdynia.pl/ebok).
+  3. Wysyłając SMS (Instrukcja: [SMS](https://pewik.gdynia.pl/strefa-klienta/podaj-wskazanie-wodomierza-poprzez-sms)).
+  4. Dzwoniąc na Teleodczyt (Voicebot).
+- Wodomierz GŁÓWNY: Własność PEWIK. Wymiana bezpłatna (pilnuje PEWIK).
+- Wodomierz OGRODOWY (Podlicznik):
+  * Własność Klienta (Ty kupujesz, montujesz i pilnujesz legalizacji co 5 lat).
+  * Po wymianie/montażu wyślij Wniosek nr 23 (lub e-mail) o oplombowanie.
+- Zamarznięcie: Klient płaci za wymianę zamarzniętego licznika.
+";
+        }
+        
+        // 8. POMOC E-BOK
+        if ($this->contains_any($msg, ['logow', 'rejestrac', 'hasł', 'mail', 'konto', 'e-bok', 'ebok', 'faktura elektroniczn', 'nie działa', 'błąd'])) {
+            $content .= "
+TEMAT: POMOC E-BOK
+- Rejestracja: [Formularz rejestracyjny](https://ebok.pewik.gdynia.pl/public/rejestracja).
+- Logowanie: [Zaloguj się](https://ebok.pewik.gdynia.pl/login).
+- Błąd 'Błędne dane': Oznacza brak PESEL/NIP w systemie -> Napisz do BOK.
+- Brak e-faktury: Musisz ją aktywować w zakładce 'Klient' w e-BOK.
+";
+        }
+        
+        // 9. BAZA KONTAKTOWA (Zawsze dodawana)
+        $content .= "
+KONTAKT BOK:
+- Strona: [KONTAKT](https://pewik.gdynia.pl/kontakt/biuro-obslugi-klienta/)
+- E-mail: bok@pewik.gdynia.pl (Preferowany)
+- Telefon: 58 66 87 311 (7:00-15:00)
+- Adres: ul. Witomińska 21, Gdynia
+";
+        return $content;
+    }
+
+    /**
+     * Helper do sprawdzania wielu słów kluczowych
+     */
+    private function contains_any($haystack, $needles) {
+        foreach ($needles as $needle) {
+            if (strpos($haystack, $needle) !== false) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Wysyła zapytanie do OCI Generative AI (Endpoint Chat)
+     */
+    private function call_cohere_model($user_message, $knowledge_context) {
+        
+        // Prompt Systemowy (Preamble)
+        $system_preamble = "Jesteś asystentem PEWIK Gdynia. Odpowiadasz na pytania użytkownika.
+ZASADY:
+1. Odpowiadaj TYLKO na podstawie poniższej WIEDZY.
+2. **ZASADA LINKÓW:** Jeśli w WIEDZY znajduje się link URL (np. do wniosku, cennika, e-BOK), MUSISZ go zawrzeć w odpowiedzi.
+3. **ZASADA WYKLUCZEŃ:** Jeśli użytkownik pyta o ciepłą wodę lub awarię wewnątrz mieszkania, poinformuj, że PEWIK odpowiada tylko za zimną wodę i sieć miejską. Odeślij do Zarządcy.
+4. **ZASADA CEN:** Nigdy nie podawaj kwot (zł). Podawaj tylko link do cennika.
+5. Zachowaj formatowanie Markdown.
+6. Zwracaj się per 'Ty'.
+
+WIEDZA:
+$knowledge_context
+";
+
+        // Struktura JSON dla Cohere Command R+ w OCI
+        $body = array(
+            'compartmentId' => $this->compartment_id,
+            'servingMode' => array(
+                'servingType' => 'ON_DEMAND',
+                'modelId' => $this->model_id
+            ),
+            'chatRequest' => array(
+                'message' => $user_message,
+                'preambleOverride' => $system_preamble,
+                'maxTokens' => 600,
+                'temperature' => 0,
+                'topP' => 0.75,
+                'frequencyPenalty' => 0,
+                'presencePenalty' => 0
+            )
+        );
+
+        $body_json = json_encode($body);
+
+        // Podpisanie i wysłanie
+        $headers = $this->signer->sign_request('POST', $this->inference_endpoint, array(), $body_json);
+        $wp_headers = $this->format_headers_for_wp($headers);
+
+        // Timeout 120s
+        $response = wp_remote_post($this->inference_endpoint, array(
+            'headers' => $wp_headers,
+            'body' => $body_json,
+            'timeout' => 120,
+            'httpversion' => '1.1'
+        ));
+
+        if (is_wp_error($response)) {
+            throw new Exception('WP Error: ' . $response->get_error_message());
+        }
+
         $response_code = wp_remote_retrieve_response_code($response);
         $response_body = wp_remote_retrieve_body($response);
         
-        // Loguj odpowiedź jeśli debug jest włączony
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log(sprintf(
-                '[PEWIK Chatbot API] Response Code: %d | Body: %s',
-                $response_code,
-                substr($response_body, 0, 200)
-            ));
+        if ($response_code !== 200) {
+            error_log('OCI API Error: ' . $response_body);
+            throw new Exception('Błąd API Oracle (Kod ' . $response_code . ')');
         }
-        
-        // WAŻNE: Sprawdź czy sesja wygasła (404)
-        if ($response_code === 404) {
-            return array(
-                'error' => true,
-                'message' => 'Sesja wygasła',
-                'code' => 404,
-                'session_expired' => true
-            );
-        }
-        
-        // Sprawdź kod odpowiedzi
-        if ($response_code !== 200 && $response_code !== 201) {
-            $error_data = json_decode($response_body, true);
-            $error_message = isset($error_data['message']) ? $error_data['message'] : 'Nieznany błąd API';
-            
-            // Specjalna obsługa częstych błędów
-            if ($response_code === 401) {
-                $error_message = 'Błąd autoryzacji. Sprawdź konfigurację kluczy API.';
-            } elseif ($response_code === 429) {
-                $error_message = 'Przekroczono limit zapytań API. Spróbuj ponownie za chwilę.';
-            } elseif ($response_code === 500) {
-                $error_message = 'Błąd serwera Oracle. Spróbuj ponownie później.';
-            }
-            
-            return array(
-                'error' => true,
-                'message' => sprintf('Błąd API (kod %d): %s', $response_code, $error_message),
-                'code' => $response_code
-            );
-        }
-        
-        // Parsuj odpowiedź JSON
+
         $data = json_decode($response_body, true);
-        
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            return array(
-                'error' => true,
-                'message' => 'Błąd parsowania odpowiedzi JSON: ' . json_last_error_msg()
-            );
+
+        if (isset($data['chatResponse']['text'])) {
+            return $data['chatResponse']['text'];
         }
         
-        // Wyciągnij wiadomość z odpowiedzi
-        $bot_message = $this->extract_message($data);
-        
-        // ✅ OBLICZ CZAS ODPOWIEDZI
+        return "Przepraszam, nie otrzymałem poprawnej odpowiedzi od systemu.";
+    }
+
+    // Metoda pomocnicza do budowania odpowiedzi dla JS
+    private function build_response($message, $session_id, $start_time, $error = false) {
         $response_time = microtime(true) - $start_time;
-        
-        // ✅ ZAPISZ DO BAZY DANYCH (LOGOWANIE)
-        $this->log_conversation(array(
-            'session_id' => $session_id,
-            'user_message' => $user_message,
-            'bot_response' => $bot_message,
-            'user_ip' => $this->get_user_ip(),
-            'user_id' => get_current_user_id(),
-            'response_time' => $response_time,
-            'metadata' => json_encode(array(
-                'user_agent' => isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '',
-                'page_url' => isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : '',
-                'citations' => isset($data['citations']) ? $data['citations'] : null,
-                'traces' => isset($data['traces']) ? $data['traces'] : null,
-                'model_used' => 'oracle-ai-agent',
-                'endpoint_id' => $this->agent_endpoint_id,
-                'response_code' => $response_code
-            ))
-        ));
-        
-        // ✅ POBIERZ ID ostatnio dodanej wiadomości
-        global $wpdb;
-        $message_id = $wpdb->insert_id;
-        
-        // Zwróć odpowiedź Z ID WIADOMOŚCI
         return array(
-            'error' => false,
-            'message' => $bot_message,
+            'error' => $error,
+            'message' => $message,
             'sessionId' => $session_id,
-            'messageId' => $message_id,
-            'hasTrace' => isset($data['traces']),
-            'hasCitations' => isset($data['message']['content']['citations'])
+            'messageId' => rand(1000,9999),
+            'hasTrace' => false,
+            'hasCitations' => false
         );
     }
     
-    /**
-     * Wyciągnij wiadomość tekstową z odpowiedzi API
-     */
-    private function extract_message($data) {
-        // POPRAWNA ŚCIEŻKA: message.content.text
-        if (isset($data['message']['content']['text'])) {
-            return $data['message']['content']['text'];
-        }
-        
-        // Fallback na inne możliwe struktury (jeśli Oracle zmieni format)
-        if (isset($data['message']['content']) && is_array($data['message']['content'])) {
-            foreach ($data['message']['content'] as $content_item) {
-                if (isset($content_item['text'])) {
-                    return $content_item['text'];
-                }
-            }
-        }
-        
-        if (isset($data['message']['text'])) {
-            return $data['message']['text'];
-        }
-        
-        if (isset($data['text'])) {
-            return $data['text'];
-        }
-        
-        if (isset($data['response'])) {
-            return $data['response'];
-        }
-        
-        // Jeśli nie znaleziono wiadomości, zwróć domyślną
-        return 'Przepraszam, nie mogłem wygenerować odpowiedzi. Spróbuj przeformułować pytanie lub skontaktuj się z BOK: 58 66 87 311.';
-    }
-    
-    /**
-     * Loguj konwersację do bazy danych
-     */
-    private function log_conversation($data) {
-        global $wpdb;
-        $table_name = $wpdb->prefix . 'chatbot_conversations';
-        
-        $wpdb->insert(
-            $table_name,
-            array(
-                'session_id' => $data['session_id'],
-                'user_message' => $data['user_message'],
-                'bot_response' => $data['bot_response'],
-                'user_ip' => $data['user_ip'],
-                'user_id' => $data['user_id'],
-                'response_time' => $data['response_time'],
-                'metadata' => $data['metadata']
-            ),
-            array(
-                '%s', // session_id
-                '%s', // user_message
-                '%s', // bot_response
-                '%s', // user_ip
-                '%d', // user_id
-                '%f', // response_time
-                '%s'  // metadata
-            )
-        );
-    }
-    
-    /**
-     * Pobierz IP użytkownika
-     */
-    private function get_user_ip() {
-        if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
-            return $_SERVER['HTTP_CLIENT_IP'];
-        } elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-            return $_SERVER['HTTP_X_FORWARDED_FOR'];
-        } elseif (!empty($_SERVER['REMOTE_ADDR'])) {
-            return $_SERVER['REMOTE_ADDR'];
-        }
-        return 'unknown';
-    }
-    
-    /**
-     * Formatuj nagłówki dla WordPress HTTP API
-     */
     private function format_headers_for_wp($headers) {
         $wp_headers = array();
         foreach ($headers as $key => $value) {
-            // WordPress wymaga nagłówków z wielkimi literami na początku
             $header_name = implode('-', array_map('ucfirst', explode('-', $key)));
             $wp_headers[$header_name] = $value;
         }
         return $wp_headers;
     }
     
-    /**
-     * Sprawdź status endpointu (opcjonalne)
-     */
-    public function check_endpoint_status() {
-        $path = '/20240531/agentEndpoints/' . $this->agent_endpoint_id;
-        $full_url = $this->endpoint_url . $path;
-        
-        try {
-            $headers = $this->signer->sign_request('GET', $full_url);
-            $wp_headers = $this->format_headers_for_wp($headers);
-            
-            $response = wp_remote_get($full_url, array(
-                'headers' => $wp_headers,
-                'timeout' => 15,
-                'sslverify' => true
-            ));
-            
-            if (is_wp_error($response)) {
-                return array(
-                    'status' => 'error',
-                    'message' => $response->get_error_message()
-                );
-            }
-            
-            $response_code = wp_remote_retrieve_response_code($response);
-            
-            return array(
-                'status' => $response_code === 200 ? 'active' : 'inactive',
-                'code' => $response_code
-            );
-            
-        } catch (Exception $e) {
-            return array(
-                'status' => 'error',
-                'message' => $e->getMessage()
-            );
-        }
+    public function create_session() {
+        return 'genai_' . uniqid();
     }
 }
