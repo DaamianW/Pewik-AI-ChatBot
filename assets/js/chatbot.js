@@ -626,14 +626,32 @@
 	}
 
 	function formatMessage(text) {
+		// 1. Najpierw czyścimy HTML dla bezpieczeństwa
 		text = $('<div>').text(text).html()
+
+		// 2. NOWE: Obsługa linków Markdown [Tekst](URL)
+		// To zamienia [e-BOK](https://...) na klikalny link
+		text = text.replace(
+			/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,
+			'<a href="$2" target="_blank" rel="noopener"><strong>$1</strong></a>'
+		)
+
+		// 3. Obsługa nowych linii
 		text = text.replace(/\n/g, '<br>')
-		text = text.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
+
+		// 4. Obsługa surowych linków (takich, które nie były w nawiasach)
+		// Regex ignoruje linki, które są już wewnątrz atrybutu href (czyli te zrobione w pkt 2)
+		text = text.replace(/(?<!href="|">)(https?:\/\/[^\s<"'\)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
+
+		// 5. Formatowanie tekstu (pogrubienia, kursywa)
 		text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
 		text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>')
 		text = text.replace(/`([^`]+)`/g, '<code>$1</code>')
+
+		// 6. Numery telefonów
 		text = text.replace(/(\d{2}\s?\d{2}\s?\d{2}\s?\d{3})/g, '<a href="tel:$1">$1</a>')
 		text = text.replace(/\b994\b/g, '<a href="tel:994"><strong>994</strong></a>')
+
 		return text
 	}
 

@@ -442,6 +442,8 @@ function pewik_chatbot_rate_message($request) {
  * Obsługa wiadomości chatbota
  */
 function pewik_chatbot_handle_message($request) {
+    global $wpdb; // Potrzebne do zapisu w bazie
+    
     $user_message = $request->get_param('message');
     $session_id = $request->get_param('sessionId');
     $context = $request->get_param('context');
@@ -454,7 +456,7 @@ function pewik_chatbot_handle_message($request) {
         );
     }
     
-    // Rate limiting - max 60 wiadomości na godzinę z jednego IP (pomiń dla localhost)
+    // Rate limiting
     $user_ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
     if ($user_ip !== '127.0.0.1' && $user_ip !== '::1' && !pewik_chatbot_check_rate_limit($user_ip)) {
         return new WP_Error(
@@ -472,15 +474,44 @@ function pewik_chatbot_handle_message($request) {
             $session_id = $chatbot->create_session();
         }
         
+        // 1. Pobierz odpowiedź z Oracle API
         $response = $chatbot->send_message($user_message, $session_id, $context);
+        
+        // 2. ZAPIS DO BAZY DANYCH (To naprawia błąd oceniania)
+        $table_name = $wpdb->prefix . 'chatbot_conversations';
+        $user_id = get_current_user_id(); // 0 jeśli niezalogowany
+        
+        $insert_result = $wpdb->insert(
+            $table_name,
+            array(
+                'session_id' => $response['sessionId'],
+                'user_message' => $user_message,
+                'bot_response' => $response['message'], // Odpowiedź bota
+                'user_ip' => $user_ip,
+                'user_id' => $user_id,
+                'response_time' => isset($response['responseTime']) ? $response['responseTime'] : 0,
+                'timestamp' => current_time('mysql'),
+                'metadata' => json_encode(array('context' => $context)) // Opcjonalnie zapisujemy kontekst
+            ),
+            array('%s', '%s', '%s', '%s', '%d', '%f', '%s', '%s')
+        );
+
+        // 3. Przypisz prawdziwe ID z bazy do odpowiedzi
+        if ($insert_result) {
+            $response['messageId'] = $wpdb->insert_id;
+        } else {
+            // Logowanie błędu bazy danych, jeśli zapis się nie uda
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('[PEWIK Chatbot DB Error] ' . $wpdb->last_error);
+            }
+        }
         
         // Loguj wiadomości (opcjonalnie)
         if (defined('WP_DEBUG') && WP_DEBUG) {
             error_log(sprintf(
-                '[PEWIK Chatbot] User: %s | Bot: %s | Session: %s',
-                $user_message,
-                substr($response['message'] ?? 'error', 0, 100),
-                $session_id
+                '[PEWIK Chatbot] Saved ID: %d | Session: %s',
+                $response['messageId'],
+                $response['sessionId']
             ));
         }
         
@@ -512,7 +543,7 @@ function pewik_chatbot_check_rate_limit($user_ip) {
     $transient_key = 'pewik_chatbot_rate_' . md5($user_ip);
     $count = get_transient($transient_key);
 
-    if ($count && $count >= 60) {
+    if ($count && $count >= 100) {
         return false;
     }
 
@@ -2398,3 +2429,34 @@ function pewik_chatbot_action_links($links) {
     array_unshift($links, $settings_link);
     return $links;
 }
+
+function pewik_test_oci_connection() {
+    echo "<h2>🧪 Test połączenia z Oracle Cloud</h2>";
+    
+    // Test DNS
+    $host = 'inference.generativeai.eu-frankfurt-1.oci.oraclecloud.com';
+    $ip = gethostbyname($host);
+    echo "DNS: " . ($ip !== $host ? "✅ $ip" : "❌ Błąd") . "<br>";
+    
+    // Test portu
+    $socket = @fsockopen($host, 443, $errno, $errstr, 10);
+    echo "Port 443: " . ($socket ? "✅ Otwarty" : "❌ Zablokowany: $errstr") . "<br>";
+    if ($socket) fclose($socket);
+    
+    // Test cURL
+    $ch = curl_init("https://$host");
+    curl_setopt_array($ch, array(
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 10,
+        CURLOPT_NOBODY => true
+    ));
+    curl_exec($ch);
+    $error = curl_error($ch);
+    echo "cURL: " . ($error ? "❌ $error" : "✅ OK") . "<br>";
+    curl_close($ch);
+}
+
+add_action('admin_menu', function() {
+    add_submenu_page('pewik-chatbot', 'Test OCI', '🧪 Test', 'manage_options', 
+        'pewik-test', 'pewik_test_oci_connection');
+}, 99);
