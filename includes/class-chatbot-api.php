@@ -138,13 +138,13 @@ class PEWIK_Chatbot_API {
                 'jak długo potrwa', 'kiedy będzie zdatna', 'kiedy koniec', 'kiedy można pić', 'ile to potrwa',
                 // Odniesienia do komunikatów
                 'informacja na stronie', 'komunikat o wodzie', 'alert', 'ostrzeżenie o wodzie', 'aktualizacja statusu',
-                // Pytania o bieżącą sytuację
-                'sytuacja z wodą', 'jaka sytuacja', 'co z wodą', 'aktualny stan', 'czy można pić', 'można pić wodę',
+                // Pytania o bieżącą sytuację (bardziej specyficzne - związane z wodą, nie licznikiem)
+                'sytuacja z wodą', 'jaka sytuacja z wodą', 'co z wodą', 'aktualny stan wody', 'czy można pić', 'można pić wodę',
                 'czy można się kąpać', 'można się kąpać', 'czy można się myć', 'można normalnie', 'czy jest bezpieczna',
                 'czy woda jest ok', 'czy woda jest dobra', 'co się dzieje z wodą', 'problem z wodą w',
                 // Odniesienia do komunikatów/informacji wydanych przez PEWIK
                 'wydali informację', 'wydaliście informację', 'informacja o wodzie', 'komunikat dotyczący',
-                'wyłączonych z pitnej', 'wyłączon', 'dzielnic'
+                'wyłączonych z pitnej', 'wyłączon'
             ],
             'title' => 'Bieżące zdarzenia dotyczące jakości wody',
             'link' => 'https://pewik.gdynia.pl/aktualnosci/',
@@ -180,7 +180,7 @@ class PEWIK_Chatbot_API {
             'link_text' => 'Ceny i taryfy'
         ),
         'rodo' => array(
-            'keywords' => ['rodo', 'polityka prywatności', 'przetwarzacie moje dane', 'jakie dane przetwarzacie', 'iod', 'inspektor ochrony danych', 'gdpr', 'prawo do bycia zapomnianym', 'usunięcie danych', 'cofnięcie zgody na przetwarzanie', 'kto ma dostęp do danych', 'ochrona danych osobowych'],
+            'keywords' => ['rodo ', ' rodo', 'polityka prywatności', 'przetwarzacie moje dane', 'jakie dane przetwarzacie', 'iod', 'inspektor ochrony danych', 'gdpr', 'prawo do bycia zapomnianym', 'usunięcie danych', 'cofnięcie zgody na przetwarzanie', 'kto ma dostęp do danych', 'ochrona danych osobowych', 'przepisy rodo', 'zgodnie z rodo'],
             'title' => 'Polityka Ochrony Danych Osobowych (RODO)',
             'link' => 'https://pewik.gdynia.pl/rodo/',
             'link_text' => 'RODO'
@@ -857,7 +857,7 @@ class PEWIK_Chatbot_API {
         // =====================================================
         // SEKCJA 4: WNIOSKI I FORMULARZE (z linkami do kotwic)
         // =====================================================
-        if ($this->contains_any($msg, ['wniosek', 'formularz', 'druk', 'dokument', 'gdzie', 'skąd', 'pobrać', 'załatwić', 'przyłącz', 'umow', 'przepis', 'właściciel', 'reklamac', 'rozwiąz', 'zrezygn', 'nazwisk', 'dane', 'projekt', 'mapy', 'hydrant', 'urządzen', 'przebudow', 'podłącz', 'działk', 'dom', 'nieruchom', 'kanal', 'sieć', 'sieci', 'szko', 'poleceni', 'lokalow', 'ogrogow', 'obiekt', 'budowl', 'zmiana adresu', 'zmiana nazwiska', 'zmiana telefon', 'zmiana mail', 'zmiana e-mail', 'aktualizacja danych', 'adres korespondenc', 'nowy adres', 'zmienić adres', 'zmienić dane'])) {
+        if ($this->contains_any($msg, ['wniosek', 'formularz', 'druk', 'dokument', 'gdzie', 'skąd', 'pobrać', 'załatwić', 'przyłącz', 'umow', 'przepis', 'właściciel', 'reklamac', 'rozwiąz', 'zrezygn', 'nazwisk', 'dane', 'projekt', 'mapy', 'hydrant', 'urządzen', 'przebudow', 'podłącz', 'działk', 'dom', 'nieruchom', 'kanal', 'sieć', 'sieci', 'szko', 'poleceni', 'lokalow', 'ogrogow', 'obiekt', 'budowl', 'zmiana adresu', 'zmiana nazwiska', 'zmiana telefon', 'zmiana mail', 'zmiana e-mail', 'aktualizacja danych', 'adres korespondenc', 'nowy adres', 'zmienić adres', 'zmienić dane', 'rozwód', 'rozwod', 'odłącz', 'odlacz', 'spadek', 'sprzedaż', 'sprzedaz', 'nowy właściciel', 'zmiana właściciela', 'przepisać umowę', 'przepisanie umowy'])) {
             $content .= "TEMAT: WNIOSKI I FORMULARZE\n";
             
             $content .= "STRONA GŁÓWNA FORMULARZY: https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/\n\n";
@@ -874,8 +874,8 @@ class PEWIK_Chatbot_API {
             
             $content .= "=== B. UMOWY, ROZLICZENIA, REKLAMACJE (wnioski 10-18) ===\n";
             $content .= "LINK: https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#umowy\n";
-            $content .= "- Nr 10: Zawarcie umowy (nowa umowa lub przepisanie) + Zał.1: Protokół zdawczo-odbiorczy\n";
-            $content .= "- Nr 11: Rozwiązanie umowy\n";
+            $content .= "- Nr 10: Zawarcie umowy (nowa umowa lub przepisanie na inną osobę) + Zał.1: Protokół zdawczo-odbiorczy\n";
+            $content .= "- Nr 11: Rozwiązanie umowy (zakończenie umowy, rezygnacja)\n";
             $content .= "- Nr 12: Polecenie zapłaty (włączenie)\n";
             $content .= "- Nr 13: Odwołanie polecenia zapłaty\n";
             $content .= "- Nr 14: Raport lokalowy\n";
@@ -884,8 +884,14 @@ class PEWIK_Chatbot_API {
             $content .= "- Nr 17: Zgłoszenie szkody samochodowej\n";
             $content .= "- Nr 18: Wniosek o aktualizację danych Usługobiorcy (ZMIANA DANYCH: adres korespondencji, nazwisko, telefon, e-mail)\n\n";
             
-            $content .= "WAŻNE - ZMIANA DANYCH USŁUGOBIORCY:\n";
-            $content .= "Zmiana adresu korespondencji, nazwiska, telefonu, e-maila = Wniosek nr 18 (Aktualizacja danych Usługobiorcy)\n";
+            $content .= "WAŻNE - ROZWÓD / PRZEPISANIE UMOWY / ZMIANA WŁAŚCICIELA:\n";
+            $content .= "Gdy chcesz przepisać umowę na inną osobę (np. po rozwodzie, sprzedaży, spadku):\n";
+            $content .= "1. Obecny usługobiorca składa: Wniosek nr 11 (Rozwiązanie umowy)\n";
+            $content .= "2. Nowy usługobiorca składa: Wniosek nr 10 (Zawarcie umowy) + Załącznik 1 (Protokół zdawczo-odbiorczy)\n";
+            $content .= "Oba wnioski można złożyć jednocześnie na: bok@pewik.gdynia.pl\n\n";
+            
+            $content .= "WAŻNE - ZMIANA DANYCH USŁUGOBIORCY (bez zmiany osoby):\n";
+            $content .= "Zmiana adresu korespondencji, nazwiska (np. po ślubie), telefonu, e-maila = Wniosek nr 18 (Aktualizacja danych Usługobiorcy)\n";
             $content .= "Link: https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#umowy\n\n";
             
             $content .= "=== C. WODOMIERZE LOKALOWE I OGRODOWE (wnioski 21-23) ===\n";
@@ -957,7 +963,7 @@ class PEWIK_Chatbot_API {
         // =====================================================
         // SEKCJA 7: WODOMIERZE I ODCZYTY
         // =====================================================
-        if ($this->contains_any($msg, ['licznik', 'wodomierz', 'odczyt', 'ogród', 'legalizac', 'wymian', 'mróz', 'zamarz', 'podlicznik', 'studzienk', 'stan', 'podaj', 'przekaz', 'remont', 'uszkodz', 'zepsut', 'pęknięt', 'rozbit'])) {
+        if ($this->contains_any($msg, ['licznik', 'wodomierz', 'odczyt', 'ogród', 'legalizac', 'wymian', 'mróz', 'zamarz', 'podlicznik', 'studzienk', 'stan', 'podaj', 'przekaz', 'remont', 'uszkodz', 'zepsut', 'pęknięt', 'rozbit', 'plomb', 'oplomb', 'umówić'])) {
             $content .= "TEMAT: WODOMIERZE I ODCZYTY\n";
             
             $content .= "--- JAK PODAĆ ODCZYT? ---\n";
@@ -976,6 +982,14 @@ class PEWIK_Chatbot_API {
             $content .= "WAŻNE - USZKODZENIE Z WINY KLIENTA:\n";
             $content .= "Jeśli wodomierz został uszkodzony z winy klienta (np. podczas remontu, prac budowlanych, zamarznięcia z powodu braku zabezpieczenia), wymiana jest ODPŁATNA - klient pokrywa koszt nowego wodomierza i robocizny.\n";
             $content .= "W takim przypadku zgłoś uszkodzenie: bok@pewik.gdynia.pl lub tel. +48 58 66 87 311.\n";
+            
+            $content .= "--- OPLOMBOWANIE / UMÓWIENIE WIZYTY ---\n";
+            $content .= "⚠️ WAŻNE: Umówienie wizyty na oplombowanie wodomierza odbywa się WYŁĄCZNIE przez e-mail!\n";
+            $content .= "Adres: bok@pewik.gdynia.pl\n";
+            $content .= "W wiadomości podaj: adres nieruchomości, numer telefonu kontaktowego, preferowany termin.\n";
+            $content .= "❌ NIE umawiamy wizyt telefonicznie!\n";
+            $content .= "❌ NIE dzwoń w sprawie umówienia oplombowania - napisz e-mail!\n";
+            $content .= "Dotyczy to: oplombowania, kontroli wodomierza, założenia plomby, wymiany wodomierza ogrodowego.\n";
             
             $content .= "--- WYMIANA WODOMIERZA OGRODOWEGO ---\n";
             $content .= "Wodomierz ogrodowy (podlicznik) jest własnością KLIENTA.\n";
@@ -1335,6 +1349,12 @@ Gdy użytkownik pyta jak coś załatwić, ZAWSZE stosuj tę kolejność:
 
 NIGDY nie zaczynaj odpowiedzi od 'skontaktuj się z BOK' lub 'zadzwoń'. 
 ZAWSZE najpierw podaj konkretny formularz i gdzie go znaleźć!
+
+=== OPLOMBOWANIE / UMÓWIENIE WIZYTY ===
+BEZWZGLĘDNA ZASADA: Umówienie wizyty na oplombowanie wodomierza odbywa się WYŁĄCZNIE przez e-mail: bok@pewik.gdynia.pl
+NIE podawaj numeru telefonu do umawiania wizyt oplombowania!
+NIE sugeruj dzwonienia w sprawie oplombowania!
+Dotyczy: oplombowanie, kontrola wodomierza, założenie plomby, wymiana wodomierza ogrodowego.
 
 === WIEDZA ===
 $knowledge_context";
