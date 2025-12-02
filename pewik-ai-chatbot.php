@@ -474,8 +474,30 @@ function pewik_chatbot_handle_message($request) {
             $session_id = $chatbot->create_session();
         }
         
-        // 1. Pobierz odpowiedź z Oracle API
-        $response = $chatbot->send_message($user_message, $session_id, $context);
+        // =====================================================
+        // POBIERZ HISTORIĘ KONWERSACJI Z BAZY DANYCH
+        // =====================================================
+        $chat_history = array();
+        $table_name = $wpdb->prefix . 'chatbot_conversations';
+        
+        // Pobierz ostatnie 5 wymian dla tej sesji (10 wiadomości: 5 user + 5 bot)
+        $history_rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT user_message, bot_response 
+             FROM $table_name 
+             WHERE session_id = %s 
+             ORDER BY timestamp DESC 
+             LIMIT 5",
+            $session_id
+        ), ARRAY_A);
+        
+        // Odwróć kolejność (od najstarszej do najnowszej)
+        if (!empty($history_rows)) {
+            $chat_history = array_reverse($history_rows);
+        }
+        // =====================================================
+        
+        // 1. Pobierz odpowiedź z Oracle API (teraz z historią!)
+        $response = $chatbot->send_message($user_message, $session_id, $context, $chat_history);
         
         // 2. ZAPIS DO BAZY DANYCH (To naprawia błąd oceniania)
         $table_name = $wpdb->prefix . 'chatbot_conversations';
@@ -570,7 +592,7 @@ function pewik_chatbot_add_widget() {
         <div id="pewik-chatbot-window" style="display: none;">
             <div id="pewik-chatbot-header">
                 <div>
-                    <h3>Asystent PEWIK GDYNIA</h3>
+                    <h3>Wirtualny asystent PEWIK Gdynia</h3>
                 </div>
                 <div class="chatbot-header-actions">
                     <button id="pewik-chatbot-reset" aria-label="Nowa konwersacja" title="Rozpocznij nową konwersację">
@@ -608,6 +630,9 @@ function pewik_chatbot_add_widget() {
                     </svg>
                 </button>
             </div>
+            <div id="pewik-chatbot-disclaimer">
+                Wirtualny asystent PEWIK Gdynia może się mylić, w tym w informacjach o osobach, dlatego sprawdzaj jego odpowiedzi. <a href="#" target="_blank">Twoja prywatność</a>
+            </div>
         </div>
     </div>
     <?php
@@ -641,7 +666,7 @@ function pewik_chatbot_enqueue_assets() {
         'sessionCreateUrl' => rest_url('pewik-chatbot/v1/session/create'),
         'sessionResetUrl' => rest_url('pewik-chatbot/v1/session/reset'),
         'nonce' => wp_create_nonce('wp_rest'),
-        'agentName' => 'Asystent PEWIK Gdynia',
+        'agentName' => 'Wirtualny asystent PEWIK Gdynia',
         'region' => PEWIK_REGION
     ));
 }

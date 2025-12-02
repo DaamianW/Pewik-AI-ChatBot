@@ -1,7 +1,35 @@
 <?php
 /**
  * Klasa do komunikacji z OCI Generative AI (Model Cohere Command R+)
- * Wersja: FIXED (Zgodna z działającym skryptem Python)
+ * Wersja: 2.2 - SŁOWNIK SYNONIMÓW POTOCZNYCH
+ * 
+ * ZMIANY W TEJ WERSJI (2.2):
+ * 1. Dodano $customer_synonyms - słownik synonimów potocznych używanych przez klientów
+ * 2. Dodano normalize_user_message() - normalizacja języka potocznego na formalny
+ * 3. Dodano get_synonyms_context() - kontekst synonimów dla modelu AI
+ * 4. Model rozumie teraz potoczne określenia: licznik=wodomierz, przepisanie=zawarcie umowy, itd.
+ * 
+ * ZMIANY W WERSJI (2.1):
+ * 1. Dodano $restricted_business_topics - tablica tematów wrażliwych biznesowo
+ * 2. Dodano check_restricted_business_topic() - wykrywanie tematów wymagających oficjalnych źródeł
+ * 3. Dodano format_restricted_topic_response() - przyjazne odpowiedzi z linkami do źródeł
+ * 
+ * WYKLUCZENIA BIZNESOWE (tematy, na które asystent nie odpowiada szczegółowo):
+ * - Awaryjne i planowane wyłączenia → https://pewik.gdynia.pl/awarie/
+ * - Przetargi, zamówienia publiczne, rekrutacja → https://pewik.gdynia.pl/strefa-partnera/postepowania-2/ | /kariera/
+ * - Dofinansowania (WFOŚiGW, UE) → https://pewik.gdynia.pl/projekty-unijne/
+ * - Strategia podatkowa, dostępność, sygnaliści → https://pewik.gdynia.pl/o-nas/
+ * - Szczegółowe analizy jakości wody, CSR, sponsoring → https://pewik.gdynia.pl/strefa-mieszkanca/jakosc-wody/
+ * - Aktualne inwestycje → https://pewik.gdynia.pl/strefa-mieszkanca/inwestycje/
+ * - Szczegółowe koszty/wyceny usług → https://pewik.gdynia.pl/strefa-klienta/ceny-i-taryfy/
+ * - RODO / Polityka ochrony danych → https://pewik.gdynia.pl/rodo/
+ * 
+ * POPRZEDNIE ZMIANY (2.0):
+ * 1. Dodano is_out_of_scope() - wykrywanie tematów POZA kompetencjami PEWIK
+ * 2. Dodano get_out_of_scope_response() - inteligentne odpowiedzi z przekierowaniem
+ * 3. Ulepszone matchowanie w RAG - wykluczanie "ciepłej wody" z diagnostyki awarii
+ * 4. Rozbudowana preambuła z jasnym zakresem działalności PEWIK
+ * 5. Dodano sekcję "CZEGO NIE ROBIMY" do kontekstu wiedzy
  */
 
 if (!defined('ABSPATH')) exit;
@@ -13,7 +41,191 @@ class PEWIK_Chatbot_API {
     private $model_id;
     
     // PROTOKÓŁ POWITANIA
-    const MANDATORY_GREETING = "Cześć! W czym mogę pomóc? Jestem wirtualnym asystentem, korzystającym z informacji zawartych na stronie. Mogę pomóc Ci w odnalezieniu poszukiwanych informacji.";
+    const MANDATORY_GREETING = "Cześć! W czym mogę pomóc? Jestem wirtualnym asystentem PEWIK Gdynia. Pomagam w sprawach związanych z **wodą** (zimną) i **kanalizacją**. Mogę pomóc Ci znaleźć formularze, informacje o awariach, cenniki i wiele więcej.";
+
+    // =====================================================
+    // DEFINICJE ZAKRESU DZIAŁALNOŚCI (OUT OF SCOPE)
+    // =====================================================
+    
+    /**
+     * Tematy POZA kompetencjami PEWIK
+     * Klucz = kategoria, wartość = array ze słowami kluczowymi i odpowiedzią
+     * UWAGA: Nie podajemy konkretnych nazw firm ani numerów telefonów (mogą się zmienić)
+     */
+    private $out_of_scope_topics = array(
+        'ciepla_woda' => array(
+            'keywords' => ['ciepła woda', 'ciepłą wodę', 'ciepłej wody', 'gorąca woda', 'gorącej wody', 'gorącą wodę', 'podgrzewanie wody', 'bojler', 'c.w.u', 'cwu'],
+            'response' => "PEWIK Gdynia **nie zajmuje się dostarczaniem ciepłej wody**. Dostarczamy wyłącznie wodę zimną (wodociągi) i odbieramy ścieki (kanalizacja).\n\n**Gdzie zgłosić problem z ciepłą wodą?**\n- **W bloku/mieszkaniu**: Skontaktuj się z **administratorem budynku**, **spółdzielnią** lub **wspólnotą mieszkaniową**\n- **W domu jednorodzinnym**: Problem dotyczy Twojej instalacji wewnętrznej – wezwij **hydraulika** lub sprawdź swoje urządzenie grzewcze (piec, bojler)\n- **Ciepło sieciowe**: Jeśli korzystasz z miejskiej sieci ciepłowniczej, skontaktuj się z **dostawcą ciepła** w Twoim rejonie"
+        ),
+        'ogrzewanie' => array(
+            'keywords' => ['ogrzewanie', 'kaloryfer', 'grzejnik', 'piec', 'centralne ogrzewanie', 'c.o.', 'ciepło', 'zimno w mieszkaniu', 'nie grzeje'],
+            'response' => "PEWIK Gdynia **nie zajmuje się ogrzewaniem ani ciepłem**. Dostarczamy wyłącznie wodę zimną i odbieramy ścieki.\n\n**Gdzie zgłosić problem z ogrzewaniem?**\n- **Ciepło sieciowe**: Skontaktuj się z **dostawcą ciepła** w Twoim rejonie\n- **Ogrzewanie w bloku**: **Administrator budynku**, **spółdzielnia** lub **wspólnota mieszkaniowa**\n- **Własny piec/kocioł**: Serwis Twojego urządzenia grzewczego"
+        ),
+        'gaz' => array(
+            'keywords' => ['gaz', 'gazowy', 'gazowa', 'kuchenka gazowa', 'piec gazowy', 'wyciek gazu', 'zapach gazu', 'butla'],
+            'response' => "PEWIK Gdynia **nie zajmuje się dostawą gazu**. Dostarczamy wyłącznie wodę zimną i odbieramy ścieki.\n\n**Sprawy gazowe:**\n- **Awaria/wyciek gazu**: Zadzwoń na **numer alarmowy pogotowia gazowego** (natychmiast!)\n- **Dostawy gazu**: Skontaktuj się z **operatorem sieci gazowej** lub **Twoim dostawcą gazu**\n- **Urządzenia gazowe**: Autoryzowany serwis producenta"
+        ),
+        'prad' => array(
+            'keywords' => ['prąd', 'prądu', 'elektryczność', 'energia elektryczna', 'awaria prądu', 'brak prądu', 'licznik prądu', 'blackout'],
+            'response' => "PEWIK Gdynia **nie zajmuje się dostawą energii elektrycznej**. Dostarczamy wyłącznie wodę zimną i odbieramy ścieki.\n\n**Sprawy elektryczne:**\n- **Awaria prądu**: Skontaktuj się z **operatorem sieci energetycznej** w Twoim rejonie\n- **Rozliczenia za prąd**: Skontaktuj się z **Twoim sprzedawcą energii**"
+        ),
+        'smieci' => array(
+            'keywords' => ['śmieci', 'odpady', 'wywóz śmieci', 'segregacja', 'kontener', 'kosz na śmieci', 'recykling', 'śmieciarka', 'odpady komunalne'],
+            'response' => "PEWIK Gdynia **nie zajmuje się wywozem odpadów**. Dostarczamy wyłącznie wodę zimną i odbieramy ścieki (płynne, przez kanalizację).\n\n**Sprawy odpadów komunalnych:**\n- Skontaktuj się z **Urzędem Miasta** lub **gminą** właściwą dla Twojego miejsca zamieszkania\n- Informacje o harmonogramach wywozu i segregacji znajdziesz na stronie internetowej Twojego urzędu"
+        ),
+        'internet_tv' => array(
+            'keywords' => ['internet', 'telewizja', 'kablówka', 'wifi', 'router', 'światłowód', 'tv'],
+            'response' => "PEWIK Gdynia **nie zajmuje się usługami telekomunikacyjnymi**. Dostarczamy wyłącznie wodę zimną i odbieramy ścieki.\n\n**Sprawy internetu/TV:**\nSkontaktuj się bezpośrednio z **Twoim dostawcą usług internetowych lub telewizyjnych**."
+        )
+    );
+
+    /**
+     * Tematy WRAŻLIWE BIZNESOWO - asystent nie powinien udzielać szczegółowych informacji
+     * Mogą wprowadzić użytkownika w błąd lub wymagają aktualnych danych ze źródeł oficjalnych
+     * 
+     * LISTA WYKLUCZEŃ:
+     * 1. Awaryjne i planowane wyłączenia (w tym awarie)
+     * 2. Informacje o przetargach, zamówieniach publicznych i rekrutacji
+     * 3. Dane o pozyskanych dofinansowaniach (WFOŚiGW, UE)
+     * 4. Szczegóły strategii podatkowej, deklaracji dostępności i zgłaszania naruszeń prawa
+     * 5. Szczegółowe analizy jakości wody, odpowiedzialności społecznej, sponsoringu
+     * 6. Informacje o aktualnie prowadzonych inwestycjach
+     * 7. Szczegółowe koszty świadczonych usług (wyceny/kalkulacje)
+     * 8. Szczegółowe informacje dotyczące Polityki Ochrony Danych Osobowych (RODO)
+     */
+    private $restricted_business_topics = array(
+        'awarie_wylaczenia' => array(
+            'keywords' => ['awaria planowana', 'planowane wyłączenie', 'harmonogram wyłączeń', 'kiedy włączą', 'kiedy naprawią', 'jak długo potrwa', 'status awarii', 'ile potrwa naprawa', 'lista awarii', 'mapa awarii', 'gdzie jest awaria', 'aktualne awarie', 'bieżące awarie'],
+            'title' => 'Awaryjne i planowane wyłączenia',
+            'link' => 'https://pewik.gdynia.pl/awarie/',
+            'link_text' => 'Awarie i wyłączenia'
+        ),
+        'przetargi_rekrutacja' => array(
+            'keywords' => ['przetarg', 'zamówienie publiczne', 'oferta przetarg', 'konkurs ofert', 'postępowanie przetargowe', 'rekrutacja', 'praca w pewik', 'oferty pracy', 'zatrudnienie w pewik', 'nabór pracowników', 'wolne stanowisko', 'kariera w pewik', 'szukam pracy'],
+            'title' => 'Przetargi, zamówienia publiczne i rekrutacja',
+            'link' => 'https://pewik.gdynia.pl/strefa-partnera/postepowania-2/',
+            'link_text' => 'Postępowania i przetargi',
+            'link2' => 'https://pewik.gdynia.pl/kariera/',
+            'link2_text' => 'Kariera w PEWIK'
+        ),
+        'dofinansowania' => array(
+            'keywords' => ['dofinansowanie', 'dotacja', 'fundusze unijne', 'fundusze europejskie', 'wfośigw', 'fundusz ochrony środowiska', 'środki unijne', 'projekt unijny', 'projekty ue', 'dotacje ue', 'ile dostaliście', 'skąd pieniądze'],
+            'title' => 'Dofinansowania i projekty UE',
+            'link' => 'https://pewik.gdynia.pl/projekty-unijne/',
+            'link_text' => 'Projekty unijne'
+        ),
+        'strategia_prawo' => array(
+            'keywords' => ['strategia podatkowa', 'deklaracja dostępności', 'dostępność strony', 'dostępność cyfrowa', 'wcag', 'sygnalista', 'zgłoszenie naruszenia', 'naruszenie prawa', 'whistleblowing', 'polityka podatkowa', 'nieprawidłowości w firmie'],
+            'title' => 'Strategia podatkowa, dostępność i zgłaszanie naruszeń',
+            'link' => 'https://pewik.gdynia.pl/o-nas/',
+            'link_text' => 'O nas'
+        ),
+        'csr_sponsoring' => array(
+            'keywords' => ['sponsoring', 'sponsorujecie', 'wspieracie', 'odpowiedzialność społeczna', 'csr', 'działalność charytatywna', 'darowizna', 'wspieranie'],
+            'title' => 'Działalność społeczna i sponsoring',
+            'link' => 'https://pewik.gdynia.pl/o-nas/',
+            'link_text' => 'O nas'
+        ),
+        'incydent_jakosc_wody' => array(
+            'keywords' => [
+                // Konkretne zanieczyszczenia (krótkie rdzenie dla odmian)
+                'bakterie', 'bakteria', 'e.coli', 'ecoli', 'e-coli', 'escherichia', 
+                'skażen', 'skażon',  // skażenie, skażona, skażonej, skażony
+                'zanieczyszcz',      // zanieczyszczenie, zanieczyszczona, zanieczyszczonej
+                // Instrukcje kryzysowe
+                'zakaz picia', 'nie pić', 'przegotować', 'gotować wodę', 'przegotowywać', 'nie nadaje się do picia',
+                // Pytania o czas trwania incydentu
+                'jak długo potrwa', 'kiedy będzie zdatna', 'kiedy koniec', 'kiedy można pić', 'ile to potrwa',
+                // Odniesienia do komunikatów
+                'informacja na stronie', 'komunikat o wodzie', 'alert', 'ostrzeżenie o wodzie', 'aktualizacja statusu',
+                // Pytania o bieżącą sytuację
+                'sytuacja z wodą', 'jaka sytuacja', 'co z wodą', 'aktualny stan', 'czy można pić', 'można pić wodę',
+                'czy można się kąpać', 'można się kąpać', 'czy można się myć', 'można normalnie', 'czy jest bezpieczna',
+                'czy woda jest ok', 'czy woda jest dobra', 'co się dzieje z wodą', 'problem z wodą w',
+                // Odniesienia do komunikatów/informacji wydanych przez PEWIK
+                'wydali informację', 'wydaliście informację', 'informacja o wodzie', 'komunikat dotyczący',
+                'wyłączonych z pitnej', 'wyłączon', 'dzielnic'
+            ],
+            'title' => 'Bieżące zdarzenia dotyczące jakości wody',
+            'link' => 'https://pewik.gdynia.pl/aktualnosci/',
+            'link_text' => 'Aktualności PEWIK'
+        ),
+        'inwestycje_aktualne' => array(
+            'keywords' => ['aktualne inwestycje', 'bieżące inwestycje', 'co budujecie', 'gdzie budujecie', 'kiedy skończycie budowę', 'harmonogram prac budowlanych', 'etap budowy', 'postęp prac', 'termin zakończenia inwestycji', 'plan inwestycyjny', 'jakie macie inwestycje'],
+            'title' => 'Aktualne inwestycje',
+            'link' => 'https://pewik.gdynia.pl/strefa-mieszkanca/inwestycje/',
+            'link_text' => 'Inwestycje'
+        ),
+        'koszty_wyceny' => array(
+            'keywords' => ['wycena', 'wycenę', 'kalkulacja', 'kalkulację', 'ile kosztuje przyłącze', 'koszt przyłącza', 'koszt przyłączenia', 'cena za metr', 'kosztorys', 'ile zapłacę za przyłącze', 'wylicz koszt', 'policz koszt', 'indywidualna wycena', 'szczegółowy koszt', 'oszacuj koszt', 'podaj cenę'],
+            'title' => 'Szczegółowe koszty i wyceny usług',
+            'link' => 'https://pewik.gdynia.pl/strefa-klienta/ceny-i-taryfy/',
+            'link_text' => 'Ceny i taryfy'
+        ),
+        'rodo' => array(
+            'keywords' => ['rodo', 'polityka prywatności', 'przetwarzacie moje dane', 'jakie dane przetwarzacie', 'iod', 'inspektor ochrony danych', 'gdpr', 'prawo do bycia zapomnianym', 'usunięcie danych', 'cofnięcie zgody na przetwarzanie', 'kto ma dostęp do danych', 'ochrona danych osobowych'],
+            'title' => 'Polityka Ochrony Danych Osobowych (RODO)',
+            'link' => 'https://pewik.gdynia.pl/rodo/',
+            'link_text' => 'RODO'
+        )
+    );
+
+    /**
+     * SŁOWNIK SYNONIMÓW POTOCZNYCH
+     * Mapowanie potocznych/nieformalnych określeń używanych przez klientów
+     * na terminy formalne rozumiane przez system
+     * 
+     * Format: 'termin_formalny' => ['synonim1', 'synonim2', ...]
+     */
+    private $customer_synonyms = array(
+        // Wodomierz i pomiary
+        'wodomierz' => ['licznik', 'liczydło', 'miernik', 'zegar', 'obiekt', 'licznik wody'],
+        'wskazanie wodomierza' => ['stan', 'stan licznika', 'zużycie', 'odczyt', 'ile nabił', 'ile pokazuje'],
+        
+        // Osoby i podmioty
+        'usługobiorca' => ['nabywca', 'właściciel nieruchomości', 'mieszkaniec', 'lokator', 'klient', 'odbiorca'],
+        
+        // Punkty i okresy rozliczeniowe
+        'punkt rozliczeniowy' => ['punkt sieci', 'punkt pomiarowy', 'punkt obrachunkowy', 'nr punktu', 'numer punktu'],
+        'okres obrachunkowy' => ['cykl rozliczeniowy', 'okres rozliczeniowy', 'cykl', 'okres'],
+        'kod usługobiorcy' => ['kod nabywcy', 'kod klienta', 'numer klienta'],
+        
+        // Usługi
+        'usługa zaopatrzenia w wodę' => ['produkt woda', 'dostawa wody', 'woda z sieci'],
+        'usługa odprowadzenia ścieków' => ['produkt ścieki', 'odbiór ścieków', 'kanalizacja'],
+        
+        // Umowy
+        'zawarcie umowy' => ['przepisanie umowy', 'przepisanie licznika', 'zmiana usługobiorcy', 'cesja umowy', 'przepisać', 'przenieść umowę'],
+        
+        // Warunki i dokumenty
+        'warunki przyłączenia' => ['warunki techniczne', 'warunki przyłącz', 'warunki podłączenia', 'tu', 'techniczne'],
+        'formularz wniosku' => ['druk', 'wniosek', 'dokument', 'papier', 'pismo'],
+        
+        // e-BOK
+        'e-bok' => ['ebok', 'e-bok', 'eBOK', 'E-BOK', 'EBOK', 'serwis e-bok', 'aplikacja e-bok', 'portal klienta', 'konto online'],
+        
+        // Przyłącza
+        'przyłącze' => ['przyłącz', 'przykanalik', 'sięgacz', 'podłączenie'],
+        'przyłącze wodociągowe' => ['przyłącze wody', 'przyłącze wodne', 'instalacja wodna', 'rura od wody', 'woda do domu'],
+        'przyłącze kanalizacyjne' => ['przyłącze ściekowe', 'przyłącze ścieków', 'przyłącze sanitarne', 'przykanalik', 'sięgacz', 'odgałęzienie', 'rura od ścieków', 'kanalizacja do domu'],
+        
+        // Sieci
+        'sieć wodociągowa' => ['sieć wodna', 'wodociąg', 'rura miejska', 'magistrala', 'główna rura'],
+        'sieć kanalizacyjna' => ['kanalizacja miejska', 'kanał', 'kolektor', 'główny kanał'],
+        
+        // Ścieki
+        'ścieki bytowe' => ['ścieki sanitarne', 'ścieki domowe', 'ścieki z domu'],
+        
+        // Studzienki
+        'studzienka kanalizacyjna' => ['studnia kanalizacyjna', 'studzienka', 'właz', 'kratka'],
+        'studzienka wodomierzowa' => ['studnia wodomierzowa', 'komora wodomierzowa', 'skrzynka z licznikiem'],
+        
+        // Inne
+        'teren budowy' => ['plac budowy', 'budowa'],
+        'awaria' => ['usterka', 'uszkodzenie', 'defekt', 'problem', 'nie działa'],
+        'faktura' => ['rachunek', 'rozliczenie', 'płatność', 'należność'],
+        'taryfa' => ['cennik', 'ceny', 'stawki', 'opłaty']
+    );
 
     public function __construct() {
         // Inicjalizacja Signera
@@ -23,7 +235,7 @@ class PEWIK_Chatbot_API {
         }
         $this->signer = new PEWIK_OCI_Request_Signer();
         
-        // DANE Z TWOJEGO PLIKU PYTHON
+        // DANE OCI
         $this->compartment_id = "ocid1.tenancy.oc1..aaaaaaaahakj6sqsxfouv57essllobaj4euh6e24mxa2ab7i6ktjuju4fxiq"; 
         $this->model_id = 'ocid1.generativeaimodel.oc1.eu-frankfurt-1.amaaaaaask7dceyabdu6rjjmg75pixtecqvjen4x4st4mhs2a4zzfx5cgkmq';
         $this->inference_endpoint = 'https://inference.generativeai.eu-frankfurt-1.oci.oraclecloud.com/20231130/actions/chat';
@@ -32,43 +244,66 @@ class PEWIK_Chatbot_API {
     /**
      * Główna metoda obsługi wiadomości
      */
-    public function send_message($user_message, $session_id, $context = null) {
+    public function send_message($user_message, $session_id, $context = null, $chat_history = array()) {
         $start_time = microtime(true);
         
         // ---------------------------------------------------------
-        // 1. HARD RULES (Zgodne z Pythonem)
+        // 1. HARD RULES - PRIORYTET NAJWYŻSZY
         // ---------------------------------------------------------
         
+        // 1A. Sytuacje awaryjne (PEWIK)
         if ($this->is_emergency($user_message)) {
             return $this->build_response(
-                "🛑 **STOP! To jest sprawa wymagająca natychmiastowej interwencji.**\n\nW przypadku awarii natychmiast zadzwoń pod bezpłatny numer alarmowy **994**!",
+                "🛑 **STOP! To jest sprawa wymagająca natychmiastowej interwencji.**\n\nW przypadku awarii wodno-kanalizacyjnej natychmiast zadzwoń pod bezpłatny numer alarmowy **994**!",
                 $session_id, 
                 $start_time
             );
         }
 
+        // 1B. RESTRICTED BUSINESS TOPICS - Tematy wrażliwe biznesowo
+        // Wymagające aktualnych danych z oficjalnych źródeł
+        // WAŻNE: Musi być PRZED is_sensitive_data() żeby matchować pytania o RODO
+        $restricted_check = $this->check_restricted_business_topic($user_message);
+        if ($restricted_check !== false) {
+            return $this->build_response($restricted_check, $session_id, $start_time);
+        }
+
+        // 1C. Dane osobowe - INTELIGENTNA OBSŁUGA
+        // Zamiast blokować, rozpoznaj temat i pomóż klientowi
         if ($this->is_sensitive_data($user_message)) {
-             return $this->build_response(
-                "🛑 **Zatrzymaj się!** Nie podawaj mi swoich danych osobowych. Jestem wyszukiwarką informacji i nie przetwarzam danych wrażliwych.",
-                $session_id, 
-                $start_time
-            );
+            $helpful_response = $this->get_sensitive_data_response($user_message);
+            return $this->build_response($helpful_response, $session_id, $start_time);
         }
 
+        // 1D. Frustracja / Zdenerwowanie użytkownika - DEESKALACJA
+        $frustration_check = $this->check_user_frustration($user_message);
+        if ($frustration_check !== false) {
+            return $this->build_response($frustration_check, $session_id, $start_time);
+        }
+
+        // 1E. Powitania
         if ($this->is_greeting($user_message)) {
             return $this->build_response(self::MANDATORY_GREETING, $session_id, $start_time);
         }
 
         // ---------------------------------------------------------
-        // 2. DOBÓR WIEDZY (Local RAG)
+        // 2. OUT OF SCOPE - Tematy POZA kompetencjami PEWIK
+        // ---------------------------------------------------------
+        $out_of_scope_check = $this->check_out_of_scope($user_message);
+        if ($out_of_scope_check !== false) {
+            return $this->build_response($out_of_scope_check, $session_id, $start_time);
+        }
+
+        // ---------------------------------------------------------
+        // 3. DOBÓR WIEDZY (Local RAG)
         // ---------------------------------------------------------
         $knowledge_context = $this->get_knowledge_context($user_message, $context);
 
         // ---------------------------------------------------------
-        // 3. ZAPYTANIE DO ORACLE (Fix Błędu 400)
+        // 4. ZAPYTANIE DO ORACLE (z historią konwersacji)
         // ---------------------------------------------------------
         try {
-            $bot_response = $this->call_cohere_model($user_message, $knowledge_context);
+            $bot_response = $this->call_cohere_model($user_message, $knowledge_context, $chat_history);
             return $this->build_response($bot_response, $session_id, $start_time);
             
         } catch (Exception $e) {
@@ -81,7 +316,9 @@ class PEWIK_Chatbot_API {
         }
     }
 
-    // --- METODY POMOCNICZE (HARD RULES) ---
+    // =====================================================
+    // METODY HARD RULES
+    // =====================================================
 
     private function is_emergency($text) {
         $keywords = ['wyciek', 'leje się', 'zalewa', 'pękła rura', 'tryska', 'powódź', 'wybija'];
@@ -95,64 +332,464 @@ class PEWIK_Chatbot_API {
     private function is_sensitive_data($text) {
         $text_lower = mb_strtolower(trim($text));
 
-        // 1. TWARDE FRAZY (Konkretne zwroty wskazujące na podawanie danych)
-        $keywords = [
-            'nazywam się', 'mieszkam przy', 'mój pesel', 'nr umowy', 'numer umowy', 
-            'dowód osobisty', 'moje nazwisko', 'pesel', 'seria dowodu', 'nr klienta'
+        // Lista znanych osób z PEWIK (imiona i nazwiska w lowercase)
+        $known_pewik_people = [
+            'jacek kieloch', 'wiesław kujawski',  // Zarząd
+            'marcin zawisza', 'anna lewandowska', 'kamila kraszkiewicz', 
+            'karolina maciąg', 'łukasz galiński', 'radosław skwarło'  // Rada Nadzorcza
         ];
         
-        foreach ($keywords as $word) {
+        // Frazy wskazujące na PYTANIE o osobę (nie przedstawianie się)
+        $question_patterns = [
+            'kim jest', 'kto to', 'kto to jest', 'czy znasz', 'znasz', 
+            'powiedz mi o', 'opowiedz o', 'informacje o', 'info o',
+            'prezes', 'wiceprezes', 'dyrektor', 'kierownik', 'członek', 
+            'zarząd', 'rada', 'nadzorcza', 'przewodniczący'
+        ];
+        
+        // Sprawdź czy pytanie dotyczy znanej osoby z PEWIK
+        foreach ($known_pewik_people as $person) {
+            if (strpos($text_lower, $person) !== false) {
+                return false; // To pytanie o osobę z firmy - PRZEPUŚĆ
+            }
+        }
+        
+        // Sprawdź czy to pytanie o osobę (nie przedstawianie się)
+        foreach ($question_patterns as $pattern) {
+            if (strpos($text_lower, $pattern) !== false) {
+                return false; // To pytanie - PRZEPUŚĆ
+            }
+        }
+
+        // 1. TWARDE FRAZY - użytkownik podaje swoje dane
+        $sensitive_keywords = [
+            'nazywam się', 'mieszkam przy', 'mój pesel', 'nr umowy', 'numer umowy', 
+            'dowód osobisty', 'moje nazwisko', 'pesel', 'seria dowodu', 'nr klienta',
+            'jestem', 'mam na imię', 'moje imię', 'moje dane'
+        ];
+        
+        foreach ($sensitive_keywords as $word) {
             if (strpos($text_lower, $word) !== false) return true;
         }
 
-        // 2. HEURYSTYKA: Wykrywanie samego "Imię Nazwisko" (np. "Jan Kowalski" lub "Kowalski Jan")
-        // Działa tylko dla krótkich wiadomości (< 50 znaków), co jest typowe dla przedstawiania się.
+        // 2. Heurystyka: Samo "Imię Nazwisko" bez kontekstu = prawdopodobnie przedstawianie się
         if (mb_strlen($text) < 50) {
-            // Regex: Dwa słowa zaczynające się z Wielkiej Litery (uwzględnia polskie znaki i nazwiska z myślnikiem)
             $pattern = '/^[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:-[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)?$/u';
             
             if (preg_match($pattern, trim($text))) {
-                // WYKLUCZENIA (Słowa, które mogą być napisane z dużej litery, ale nie są osobą)
-                // Np. "Awaria Wody", "Biuro Obsługi", "Woda Gdynia"
+                // Bezpieczne słowa - jeśli są, to nie jest przedstawianie się
                 $safe_words = [
                     'awaria', 'woda', 'ścieki', 'gdynia', 'pewik', 'biuro', 'obsługi', 'klienta', 
-                    'adres', 'ulica', 'gdzie', 'kiedy', 'jaka', 'cena', 'koszt', 'faktura', 'taryfa'
+                    'adres', 'ulica', 'gdzie', 'kiedy', 'jaka', 'cena', 'koszt', 'faktura', 'taryfa',
+                    'kim', 'kto', 'czy', 'prezes', 'dyrektor', 'zarząd', 'rada'
                 ];
                 
                 foreach ($safe_words as $safe) {
-                    if (strpos($text_lower, $safe) !== false) return false; // To bezpieczna fraza, nie blokuj
+                    if (strpos($text_lower, $safe) !== false) return false;
                 }
                 
-                return true; // Nie ma bezpiecznych słów, a wygląda jak Imię Nazwisko -> BLOKUJEMY
+                // Sprawdź czy to nie jest znana osoba z PEWIK (pełne dopasowanie)
+                $text_normalized = trim($text_lower);
+                foreach ($known_pewik_people as $person) {
+                    if ($text_normalized === $person) {
+                        return false; // To imię i nazwisko osoby z firmy - PRZEPUŚĆ
+                    }
+                }
+                
+                return true; // Samo imię i nazwisko bez kontekstu = BLOKUJ
             }
         }
 
         return false;
     }
 
+    /**
+     * Inteligentna odpowiedź na wiadomości zawierające dane osobowe
+     * Zamiast tylko blokować - rozpoznaje temat i podaje konkretną instrukcję
+     */
+    private function get_sensitive_data_response($text) {
+        $text_lower = mb_strtolower($text);
+        
+        // Wspólny nagłówek ostrzegawczy
+        $warning = "⚠️ **Uwaga:** Nie podawaj mi swoich danych osobowych (imię, nazwisko, adres, PESEL, numery faktur). Jestem tylko wyszukiwarką informacji i nie przetwarzam takich danych.\n\n";
+        
+        // ROZPOZNANIE TEMATU I KONKRETNA POMOC
+        
+        // 1. RATY / SPŁATA NALEŻNOŚCI
+        if ($this->contains_any($text_lower, ['rata', 'raty', 'ratach', 'rozłoż', 'spłat', 'dług', 'należnoś', 'zaległ', 'nie zapłac', 'faktur'])) {
+            return $warning . "**Jak złożyć wniosek o rozłożenie płatności na raty:**\n\n" .
+                "1. Napisz **pisemną prośbę** opisującą Twoją sytuację\n" .
+                "2. Wyślij ją na e-mail: **bok@pewik.gdynia.pl**\n" .
+                "3. Odpowiedź otrzymasz w terminie do 14 dni\n\n" .
+                "Każdy wniosek rozpatrywany jest indywidualnie.\n\n" .
+                "📄 Szczegóły procedury: [Spłata należności](https://pewik.gdynia.pl/strefa-klienta/splata-naleznosci/)";
+        }
+        
+        // 2. REKLAMACJA
+        if ($this->contains_any($text_lower, ['reklamac', 'błąd', 'pomyłk', 'nieprawidłow', 'za dużo', 'źle nalicz'])) {
+            return $warning . "**Jak złożyć reklamację:**\n\n" .
+                "1. Pobierz **Wniosek nr 15** (Zgłoszenie reklamacji)\n" .
+                "2. Wypełnij i wyślij na: **bok@pewik.gdynia.pl**\n\n" .
+                "📄 Formularze: [Pobierz wniosek](https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#umowy)";
+        }
+        
+        // 3. UMOWA / PRZEPISANIE
+        if ($this->contains_any($text_lower, ['umow', 'przepis', 'właściciel', 'nowy', 'zmian', 'dane'])) {
+            return $warning . "**Jak załatwić sprawę związaną z umową:**\n\n" .
+                "1. Pobierz odpowiedni wniosek ze strony\n" .
+                "2. Wypełnij i wyślij na: **bok@pewik.gdynia.pl**\n\n" .
+                "📄 Formularze: [Wnioski dot. umów](https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#umowy)";
+        }
+        
+        // 4. AWARIA / ZGŁOSZENIE
+        if ($this->contains_any($text_lower, ['awari', 'wyciek', 'brak wody', 'nie ma wody', 'pękł', 'zalew'])) {
+            return $warning . "**Zgłoszenie awarii:**\n\n" .
+                "🚨 Zadzwoń na numer alarmowy: **994** (całodobowo)\n\n" .
+                "Dyżurny przyjmie zgłoszenie i wyśle ekipę.";
+        }
+        
+        // 5. WODOMIERZ
+        if ($this->contains_any($text_lower, ['wodomierz', 'licznik', 'odczyt', 'wymian', 'plomb'])) {
+            return $warning . "**Sprawy wodomierzowe:**\n\n" .
+                "Wyślij e-mail na: **bok@pewik.gdynia.pl** opisując sprawę.\n\n" .
+                "📄 Formularze: [Wnioski dot. wodomierzy](https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#wodomierze)";
+        }
+        
+        // 6. DOMYŚLNA ODPOWIEDŹ (gdy nie rozpoznano tematu)
+        return $warning . "**Jak mogę Ci pomóc?**\n\n" .
+            "Aby załatwić sprawę w PEWIK:\n" .
+            "📧 E-mail: **bok@pewik.gdynia.pl**\n" .
+            "📞 Telefon: **+48 58 66 87 311** (pn-pt 7:00-15:00)\n" .
+            "🏢 Osobiście: ul. Witomińska 21, Gdynia\n\n" .
+            "📄 Formularze i wnioski: [Pobierz](https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/)";
+    }
+
     private function is_greeting($text) {
-        $greetings = ['cześć', 'czesc', 'cze', 'hej', 'hejka', 'witam', 'siema', 'siemanko', 'elo', 'dzień dobry', 'dzien dobry', 'start', 'halo'];
-        $clean_text = str_replace(['!', '.', ','], '', mb_strtolower(trim($text)));
+        $greetings = ['cześć', 'czesc', 'cze', 'hej', 'hejka', 'witam', 'siema', 'siemanko', 'elo', 'dzień dobry', 'dzien dobry', 'start', 'halo', 'hello', 'hi'];
+        $clean_text = str_replace(['!', '.', ',', '?'], '', mb_strtolower(trim($text)));
         return in_array($clean_text, $greetings);
     }
 
-    // --- RAG (WIEDZA) ---
+    // =====================================================
+    // WYKRYWANIE FRUSTRACJI / DEESKALACJA
+    // =====================================================
+
+    /**
+     * Sprawdź czy użytkownik jest sfrustrowany/zdenerwowany
+     * Jeśli tak - odpowiedz empatycznie i podaj KONKRETNE dane kontaktowe
+     * 
+     * @param string $text Wiadomość użytkownika
+     * @return string|false Empatyczna odpowiedź lub false
+     */
+    private function check_user_frustration($text) {
+        $text_lower = mb_strtolower($text);
+        
+        // Poziom 1: WYSOKA FRUSTRACJA - groźby, eskalacja, media
+        $high_frustration = [
+            'skandal', 'telewizj', 'dzwonię do', 'zgłoszę', 'skarga', 'sąd', 'prawnik', 
+            'adwokat', 'pozwę', 'media', 'gazeta', 'facebook', 'napiszę o was',
+            'dyrektor', 'nazwisko dyrektora', 'kto tu rządzi', 'kto jest szefem',
+            'kompromitacja', 'wstyd', 'hańba', 'oszuści', 'złodzieje', 'banda'
+        ];
+        
+        // Poziom 2: ŚREDNIA FRUSTRACJA - niezadowolenie, złość
+        $medium_frustration = [
+            'nie pomaga', 'bezużyteczn', 'do niczego', 'nie działa', 'głupi bot',
+            'beznadziejn', 'fataln', 'żenada', 'kpina', 'absurd', 'nonsens',
+            'nie rozumiesz', 'powtarzam', 'ile razy', 'znowu to samo', 'w kółko',
+            'nikt mi nie pomoże', 'olali mnie', 'ignorujecie', 'macie gdzieś'
+        ];
+        
+        // Poziom 3: LEKKA FRUSTRACJA - zniecierpliwienie
+        $light_frustration = [
+            'zdenerwował', 'wkurz', 'wnerw', 'irytuj', 'frustruj', 'męcz',
+            'nie chcecie pomóc', 'utrudniacie', 'komplikujecie'
+        ];
+        
+        // Sprawdź wysoki poziom frustracji
+        foreach ($high_frustration as $word) {
+            if (strpos($text_lower, $word) !== false) {
+                return $this->get_deescalation_response('high');
+            }
+        }
+        
+        // Sprawdź średni poziom frustracji
+        foreach ($medium_frustration as $word) {
+            if (strpos($text_lower, $word) !== false) {
+                return $this->get_deescalation_response('medium');
+            }
+        }
+        
+        // Sprawdź lekki poziom frustracji
+        foreach ($light_frustration as $word) {
+            if (strpos($text_lower, $word) !== false) {
+                return $this->get_deescalation_response('light');
+            }
+        }
+        
+        // Dodatkowa heurystyka: dużo wykrzykników lub caps lock
+        $exclamation_count = substr_count($text, '!');
+        $caps_ratio = strlen(preg_replace('/[^A-ZĄĆĘŁŃÓŚŹŻ]/u', '', $text)) / max(strlen($text), 1);
+        
+        if ($exclamation_count >= 3 || $caps_ratio > 0.5) {
+            return $this->get_deescalation_response('medium');
+        }
+        
+        return false;
+    }
+
+    /**
+     * Generuj empatyczną odpowiedź deeskalacyjną
+     * KLUCZOWE: Zawsze podaj KONKRETNE dane kontaktowe, nie odsyłaj "na stronę"
+     */
+    private function get_deescalation_response($level) {
+        // Zawsze dołączamy pełne dane kontaktowe
+        $contact_info = "\n\n**Oto dane kontaktowe, żebyś mógł/mogła porozmawiać z pracownikiem:**\n\n";
+        $contact_info .= "📞 **Telefon:** +48 58 66 87 311 (poniedziałek-piątek, 7:00-15:00)\n";
+        $contact_info .= "📧 **E-mail:** bok@pewik.gdynia.pl\n";
+        $contact_info .= "🏢 **Osobiście:** ul. Witomińska 21, Gdynia (poniedziałek-piątek, 8:00-15:00)\n";
+        $contact_info .= "🚨 **Awarie całodobowo:** 994";
+        
+        switch ($level) {
+            case 'high':
+                $empathy = "Rozumiem, że ta sytuacja jest dla Ciebie bardzo frustrująca i przepraszam, że moje odpowiedzi nie były pomocne. ";
+                $empathy .= "Twoja sprawa wymaga rozmowy z pracownikiem, który będzie mógł Ci realnie pomóc i wyjaśnić wszystkie wątpliwości.";
+                break;
+                
+            case 'medium':
+                $empathy = "Przykro mi, że nie udało mi się Ci pomóc tak, jak tego potrzebujesz. ";
+                $empathy .= "Jestem asystentem cyfrowym i moje możliwości są ograniczone. Twoja sprawa wymaga kontaktu z pracownikiem.";
+                break;
+                
+            case 'light':
+            default:
+                $empathy = "Rozumiem, że to może być frustrujące. Postaram się pomóc, ale jeśli moje odpowiedzi nie rozwiązują problemu, ";
+                $empathy .= "najlepiej skontaktuj się bezpośrednio z naszym biurem.";
+                break;
+        }
+        
+        return $empathy . $contact_info;
+    }
+
+    // =====================================================
+    // OUT OF SCOPE - KLUCZOWA NOWA FUNKCJONALNOŚĆ
+    // =====================================================
+
+    /**
+     * Sprawdź czy temat jest POZA kompetencjami PEWIK
+     * 
+     * @param string $text Wiadomość użytkownika
+     * @return string|false Odpowiedź out-of-scope lub false jeśli temat jest OK
+     */
+    private function check_out_of_scope($text) {
+        $text_lower = mb_strtolower($text);
+        
+        // WYJĄTKI - gdy słowo kluczowe występuje w kontekście naszych usług, NIE blokuj
+        // Np. "nie mam internetu" + "wodomierz/wniosek/zgłosić" = pytanie o alternatywną formę kontaktu
+        $pewik_context_words = ['wodomierz', 'wod', 'kanal', 'ściek', 'faktur', 'wnios', 'zgłos', 'umow', 'przyłącz', 'licznik', 'rur', 'awari'];
+        $has_pewik_context = false;
+        foreach ($pewik_context_words as $context_word) {
+            if (strpos($text_lower, $context_word) !== false) {
+                $has_pewik_context = true;
+                break;
+            }
+        }
+        
+        foreach ($this->out_of_scope_topics as $category => $data) {
+            foreach ($data['keywords'] as $keyword) {
+                if (strpos($text_lower, $keyword) !== false) {
+                    // Wyjątek dla "internet" - jeśli jest kontekst PEWIK, to pytanie o alternatywny kontakt
+                    if ($category === 'internet_tv' && $has_pewik_context) {
+                        return false; // Przepuść do normalnej obsługi
+                    }
+                    // Wyjątek dla "nie mam internetu" - to nie jest pytanie o usługi internetowe
+                    if ($category === 'internet_tv' && strpos($text_lower, 'nie mam') !== false) {
+                        return false; // Przepuść do normalnej obsługi
+                    }
+                    
+                    // Znaleziono temat out-of-scope
+                    return $this->format_out_of_scope_response($data['response'], $category);
+                }
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Formatuj odpowiedź out-of-scope z dodatkowym kontekstem
+     */
+    private function format_out_of_scope_response($response, $category) {
+        $header = "ℹ️ **To nie jest sprawa dla PEWIK**\n\n";
+        $footer = "\n\n---\n💧 Jeśli masz pytanie dotyczące **wody zimnej** lub **kanalizacji** – chętnie pomogę!";
+        
+        return $header . $response . $footer;
+    }
+
+    // =====================================================
+    // RESTRICTED BUSINESS TOPICS - Tematy wymagające oficjalnych źródeł
+    // =====================================================
+
+    /**
+     * Sprawdź czy temat wymaga przekierowania do oficjalnych źródeł
+     * Tematy wrażliwe biznesowo, gdzie asystent mógłby wprowadzić w błąd
+     * 
+     * @param string $text Wiadomość użytkownika
+     * @return string|false Odpowiedź z przekierowaniem lub false jeśli temat jest OK
+     */
+    private function check_restricted_business_topic($text) {
+        $text_lower = mb_strtolower($text);
+        
+        foreach ($this->restricted_business_topics as $category => $data) {
+            foreach ($data['keywords'] as $keyword) {
+                if (strpos($text_lower, $keyword) !== false) {
+                    return $this->format_restricted_topic_response($data, $category);
+                }
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Formatuj przyjazną odpowiedź dla tematów wymagających oficjalnych źródeł
+     * Zawiera link do odpowiedniej strony BEZ danych kontaktowych BOK
+     */
+    private function format_restricted_topic_response($topic_data, $category = '') {
+        // Specjalna odpowiedź dla incydentów jakości wody
+        if ($category === 'incydent_jakosc_wody') {
+            $response = "⚠️ **Bieżące zdarzenia dotyczące jakości wody**\n\n";
+            $response .= "Rozumiem, że pytasz o **aktualną sytuację** związaną z jakością wody. ";
+            $response .= "Nie posiadam informacji o bieżących zdarzeniach ani ich przewidywanym czasie trwania.\n\n";
+            $response .= "**Gdzie znajdziesz aktualne informacje:**\n";
+            $response .= "🔗 [Aktualności PEWIK](https://pewik.gdynia.pl/aktualnosci/) – tu publikujemy wszystkie komunikaty i aktualizacje\n";
+            $response .= "\n---\n💧 Przepraszamy za utrudnienia.";
+            return $response;
+        }
+        
+        // Standardowa odpowiedź dla pozostałych restricted topics
+        $response = "📋 **{$topic_data['title']}**\n\n";
+        
+        $response .= "To pytanie wykracza poza zakres informacji, które mogę Ci rzetelnie przekazać. ";
+        $response .= "Dane w tym obszarze zmieniają się dynamicznie i wymagają dostępu do aktualnych, oficjalnych źródeł.\n\n";
+        
+        $response .= "**Gdzie znajdziesz aktualne informacje:**\n";
+        $response .= "🔗 [{$topic_data['link_text']}]({$topic_data['link']})\n";
+        
+        // Dodaj drugi link jeśli istnieje (np. dla przetargów + rekrutacji)
+        if (isset($topic_data['link2'])) {
+            $response .= "🔗 [{$topic_data['link2_text']}]({$topic_data['link2']})\n";
+        }
+        
+        $response .= "\n---\n💧 W innych sprawach dotyczących wody i kanalizacji – chętnie pomogę!";
+        
+        return $response;
+    }
+
+    // =====================================================
+    // SŁOWNIK SYNONIMÓW - NORMALIZACJA JĘZYKA POTOCZNEGO
+    // =====================================================
+
+    /**
+     * Normalizuje wiadomość użytkownika - zamienia synonimy potoczne na terminy formalne
+     * Dzięki temu system lepiej rozumie pytania zadawane nieformalnym językiem
+     * 
+     * @param string $text Oryginalna wiadomość użytkownika
+     * @return string Znormalizowana wiadomość
+     */
+    private function normalize_user_message($text) {
+        $text_lower = mb_strtolower($text);
+        
+        foreach ($this->customer_synonyms as $formal_term => $synonyms) {
+            foreach ($synonyms as $synonym) {
+                $synonym_lower = mb_strtolower($synonym);
+                // Zamieniamy synonim na termin formalny (dla lepszego matchowania w RAG)
+                if (strpos($text_lower, $synonym_lower) !== false) {
+                    // Dodajemy termin formalny do tekstu (nie zastępujemy, żeby zachować kontekst)
+                    $text_lower .= ' ' . $formal_term;
+                }
+            }
+        }
+        
+        return $text_lower;
+    }
+
+    /**
+     * Generuje kontekst synonimów do preambuły modelu
+     * Informuje model AI o potocznych określeniach używanych przez klientów
+     * 
+     * @return string Kontekst synonimów dla preambuły
+     */
+    private function get_synonyms_context() {
+        $context = "=== SŁOWNIK SYNONIMÓW POTOCZNYCH ===\n";
+        $context .= "Klienci często używają potocznych określeń. Oto mapowanie:\n\n";
+        
+        $key_synonyms = array(
+            'wodomierz' => 'licznik, liczydło, miernik, zegar',
+            'wskazanie wodomierza' => 'stan, stan licznika, zużycie, odczyt',
+            'zawarcie umowy' => 'przepisanie umowy, przepisanie licznika, cesja',
+            'przyłącze' => 'przyłącz, przykanalik, sięgacz',
+            'e-bok' => 'ebok, EBOK, portal klienta',
+            'faktura' => 'rachunek, rozliczenie',
+            'taryfa' => 'cennik, ceny, stawki'
+        );
+        
+        foreach ($key_synonyms as $formal => $synonyms) {
+            $context .= "- **$formal** = $synonyms\n";
+        }
+        
+        $context .= "\nGdy klient użyje potocznego określenia, rozumiej je jako termin formalny.\n";
+        $context .= "---\n\n";
+        
+        return $context;
+    }
+
+    // =====================================================
+    // RAG - DOBÓR WIEDZY (ZOPTYMALIZOWANY)
+    // =====================================================
 
     private function get_knowledge_context($message, $page_context) {
-        $msg = mb_strtolower($message);
+        // Normalizuj wiadomość - zamień synonimy potoczne na terminy formalne
+        $msg = $this->normalize_user_message($message);
         $url = isset($page_context['pageUrl']) ? strtolower($page_context['pageUrl']) : '';
         $content = "";
 
-        // 1. AWARIE I ZGŁOSZENIA (ZAKTUALIZOWANE O DANE DYSPOZYTORA)
-        // 1. AWARIE, BRAK WODY I DIAGNOSTYKA (ZAKTUALIZOWANE - LEPSZA LOGIKA)
-        if ($this->contains_any($msg, ['awari', 'pękł', 'rura', 'rury', 'wyciek', 'leje', 'zalewa', 'brak wody', 'nie mam wody', 'sucho w kranie', 'ciśnieni', 'kran', 'spłuczk', 'hydraulik', '994', 'pogotowi', 'sąsiedzi', 'sąsiad'])) {
-            $content .= "TEMAT: DIAGNOSTYKA BRAKU WODY I AWARII\n";
+        // =====================================================
+        // SEKCJA 0: ZAKRES DZIAŁALNOŚCI (ZAWSZE DODAWANA)
+        // =====================================================
+        $content .= "=== ZAKRES DZIAŁALNOŚCI PEWIK GDYNIA ===\n";
+        $content .= "PEWIK zajmuje się WYŁĄCZNIE:\n";
+        $content .= "✓ Dostawą ZIMNEJ wody (wodociągi)\n";
+        $content .= "✓ Odbiorem ścieków (kanalizacja sanitarna)\n";
+        $content .= "✓ Budową i utrzymaniem sieci wodno-kanalizacyjnej\n\n";
+        $content .= "PEWIK NIE ZAJMUJE SIĘ:\n";
+        $content .= "✗ Ciepłą wodą (to administrator budynku, spółdzielnia, wspólnota lub dostawca ciepła)\n";
+        $content .= "✗ Ogrzewaniem / centralnym ogrzewaniem (administrator, dostawca ciepła)\n";
+        $content .= "✗ Gazem (operator sieci gazowej, pogotowie gazowe)\n";
+        $content .= "✗ Prądem (operator sieci energetycznej)\n";
+        $content .= "✗ Wywozem śmieci (urząd miasta/gminy)\n";
+        $content .= "---\n\n";
+
+        // =====================================================
+        // SEKCJA 0B: SŁOWNIK SYNONIMÓW POTOCZNYCH
+        // =====================================================
+        $content .= $this->get_synonyms_context();
+
+        // =====================================================
+        // SEKCJA 1: AWARIE I DIAGNOSTYKA (ULEPSZONE MATCHOWANIE)
+        // =====================================================
+        // WAŻNE: Matchujemy tylko gdy NIE ma słów o ciepłej wodzie
+        $is_water_issue = $this->contains_any($msg, ['awari', 'pękł', 'rura', 'rury', 'wyciek', 'leje', 'zalewa', 'brak wody', 'nie mam wody', 'sucho w kranie', 'ciśnieni', 'kran', 'spłuczk', 'hydraulik', '994', 'pogotowi', 'sąsiedzi', 'sąsiad']);
+        $is_about_hot_water = $this->contains_any($msg, ['ciepł', 'gorąc', 'cieplej', 'podgrzew', 'bojler', 'cwu', 'c.w.u']);
+        
+        if ($is_water_issue && !$is_about_hot_water) {
+            $content .= "TEMAT: DIAGNOSTYKA BRAKU WODY (ZIMNEJ) I AWARII\n";
             
             $content .= "--- KROK 1: SPRAWDŹ STRONĘ WWW (CZY TO AWARIA MASOWA?) ---\n";
             $content .= "Zanim zadzwonisz, sprawdź mapę awarii i wyłączeń: [PLANOWANE WYŁĄCZENIA I AWARIE](https://pewik.gdynia.pl/awarie/planowane-wylaczenia/).\n";
             $content .= "Jeśli Twój adres tam jest -> Trwają prace, musisz poczekać.\n";
             
-            $content .= "--- KROK 2: DIAGNOZA SĄSIEDZKA (BRAK WODY) ---\n";
+            $content .= "--- KROK 2: DIAGNOZA SĄSIEDZKA (BRAK WODY ZIMNEJ) ---\n";
             $content .= "Sytuacja A: Sąsiedzi też nie mają wody -> To awaria sieciowa. Sprawdź stronę www lub zadzwoń na 994.\n";
             $content .= "Sytuacja B: Sąsiedzi MAJĄ wodę, a Ty nie -> To awaria Twojej instalacji wewnętrznej (np. zakręcony zawór, zapchany filtr). PEWIK tego nie naprawia. Skontaktuj się z Administratorem Budynku lub hydraulikiem.\n";
             
@@ -164,69 +801,136 @@ class PEWIK_Chatbot_API {
             $content .= "Dyspozytor (24h): 994 lub +48 58 66 87 311. E-mail: ed@pewik.gdynia.pl\n";
         }
 
-        // 2. JAKOŚĆ
-        if ($this->contains_any($msg, ['jakość', 'tward', 'kamień', 'ph', 'skład', 'pić', 'kranówk'])) {
-            $content .= "TEMAT: JAKOŚĆ WODY\nTwardość: 60-500 mg/l CaCO3. pH: 6.5-9.5. Woda nadaje się do picia. Więcej: [Jakość Wody](https://pewik.gdynia.pl/strefa-mieszkanca/jakosc-wody/).\n";
+        // =====================================================
+        // SEKCJA 2: JAKOŚĆ WODY
+        // =====================================================
+        if ($this->contains_any($msg, ['jakość', 'jakości', 'tward', 'kamień', 'ph', 'skład', 'pić', 'kranówk', 'zdrow', 'bezpieczn', 'czyst', 'czysta', 'badanie', 'badań', 'analiz', 'parametr', 'norma', 'zdatna', 'pitna', 'można pić', 'smak', 'zapach', 'chlor', 'wapń', 'wapno'])) {
+            $content .= "TEMAT: JAKOŚĆ WODY\n";
+            $content .= "PEWIK Gdynia ZAJMUJE SIĘ jakością wody! Woda z naszej sieci jest zdatna do picia bez przegotowania.\n";
+            $content .= "Parametry: Twardość: 60-500 mg/l CaCO3. pH: 6.5-9.5.\n\n";
+            $content .= "GDZIE SPRAWDZIĆ JAKOŚĆ WODY:\n";
+            $content .= "- Strona główna jakości wody: [Jakość Wody](https://pewik.gdynia.pl/strefa-mieszkanca/jakosc-wody/)\n";
+            $content .= "- Aktualności i komunikaty: [Aktualności](https://pewik.gdynia.pl/aktualnosci/)\n";
+            $content .= "- Obszary zaopatrzenia: Gdynia, Rumia, Reda, gmina Kosakowo, gmina Puck\n\n";
+            $content .= "Jeśli użytkownik pyta o konkretną miejscowość (np. Reda, Rumia), potwierdź że PEWIK dostarcza tam wodę i odsyłaj do strony jakości wody.\n";
         }
         
-        // 3. KANALIZACJA
-        if ($this->contains_any($msg, ['toalet', 'wrzuca', 'śmieci', 'zator', 'zapcha', 'olej'])) {
-            $content .= "TEMAT: KANALIZACJA\nNie wrzucaj: chusteczek nawilżanych, tłuszczu, resztek jedzenia, materiałów budowlanych.\n";
+        // =====================================================
+        // SEKCJA 3: KANALIZACJA
+        // =====================================================
+        if ($this->contains_any($msg, ['toalet', 'wrzuca', 'śmieci', 'zator', 'zapcha', 'olej', 'kanalizacj', 'ściek', 'studzienk'])) {
+            $content .= "TEMAT: KANALIZACJA\n";
+            $content .= "Co NIE może trafiać do kanalizacji: chusteczki nawilżane, tłuszcz/olej, resztki jedzenia, materiały budowlane, leki, farby.\n";
+            $content .= "Zator w instalacji wewnętrznej (w domu) -> Hydraulik.\n";
+            $content .= "Zator w sieci miejskiej (na ulicy, wylewa ze studzienki) -> Zgłoś na 994.\n";
         }
 
-        // 4. WNIOSKI I FORMULARZE (PRECYZYJNE DEFINICJE)
-        if ($this->contains_any($msg, ['wniosek', 'formularz', 'druk', 'dokument', 'gdzie', 'skąd', 'pobrać', 'załatwić', 'przyłącz', 'umow', 'przepis', 'właściciel', 'reklamac', 'rozwiąz', 'zrezygn', 'nazwisk', 'dane', 'projekt', 'mapy', 'hydrant', 'urządzen', 'budow', 'przebudow', 'podłącz'])) {
-            $content .= "TEMAT: LISTA WNIOSKÓW I FORMULARZY\n";
-            $content .= "Wszystkie druki są tutaj: [Formularze i wnioski](https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/). Nie musisz iść do biura - wyślij skan na e-mail: bok@pewik.gdynia.pl.\n";
+        // =====================================================
+        // SEKCJA 4: WNIOSKI I FORMULARZE (z linkami do kotwic)
+        // =====================================================
+        if ($this->contains_any($msg, ['wniosek', 'formularz', 'druk', 'dokument', 'gdzie', 'skąd', 'pobrać', 'załatwić', 'przyłącz', 'umow', 'przepis', 'właściciel', 'reklamac', 'rozwiąz', 'zrezygn', 'nazwisk', 'dane', 'projekt', 'mapy', 'hydrant', 'urządzen', 'przebudow', 'podłącz', 'działk', 'dom', 'nieruchom', 'kanal', 'sieć', 'sieci', 'szko', 'poleceni', 'lokalow', 'ogrogow', 'obiekt', 'budowl', 'zmiana adresu', 'zmiana nazwiska', 'zmiana telefon', 'zmiana mail', 'zmiana e-mail', 'aktualizacja danych', 'adres korespondenc', 'nowy adres', 'zmienić adres', 'zmienić dane'])) {
+            $content .= "TEMAT: WNIOSKI I FORMULARZE\n";
             
-            $content .= "--- ETAP 1: PLANOWANIE PRZYŁĄCZA (LISTA A) ---\n";
-            $content .= "Nr 1: Zapytanie o MOŻLIWOŚĆ przyłączenia (tylko informacja, czy sieć istnieje).\n";
-            $content .= "Nr 2: Wniosek o WARUNKI PRZYŁĄCZENIA (niezbędne, aby zlecić projektantowi projekt).\n";
-            $content .= "Nr 3: Uzgodnienie PROJEKTU (składasz, gdy masz już gotowy projekt).\n";
+            $content .= "STRONA GŁÓWNA FORMULARZY: https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/\n\n";
             
-            $content .= "--- ETAP 2: BUDOWA I ODBIÓR PRZYŁĄCZA (LISTA A) ---\n";
-            $content .= "Nr 4: Zgłoszenie budowy/WŁĄCZENIA (gdy chcesz fizycznie wykonać włączenie do sieci i zamówić nadzór).\n";
-            $content .= "Nr 5: Protokół ODBIORU (dokument końcowy po budowie).\n";
-            $content .= "Nr 6: Zaświadczenie o przyłączeniu (np. do banku lub urzędu).\n";
-            $content .= "Nr 7: Zmiana warunków lub przeniesienie wodomierza głównego.\n";
+            $content .= "=== A. PRZYŁĄCZENIE DO SIECI (wnioski 1-7) ===\n";
+            $content .= "LINK: https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#przylaczenia\n";
+            $content .= "- Nr 1: Zapytanie o możliwość przyłączenia (PIERWSZY KROK!)\n";
+            $content .= "- Nr 2: Wniosek o warunki przyłączenia\n";
+            $content .= "- Nr 3: Uzgodnienie projektu przyłącza\n";
+            $content .= "- Nr 4: Zgłoszenie budowy/włączenia\n";
+            $content .= "- Nr 5: Protokół odbioru technicznego\n";
+            $content .= "- Nr 6: Zaświadczenie o przyłączeniu\n";
+            $content .= "- Nr 7: Zmiana warunków/przeniesienie wodomierza\n\n";
             
-            $content .= "--- ETAP 3: UMOWY I ROZLICZENIA (LISTA B) ---\n";
-            $content .= "Nr 10: ZAWARCIE UMOWY (Nowa umowa lub przepisanie licznika na inną osobę). Wymagany Protokół zdawczo-odbiorczy (Zał. 1).\n";
-            $content .= "Nr 11: ROZWIĄZANIE UMOWY (Wypowiedzenie lub Porozumienie stron).\n";
-            $content .= "Nr 12: Polecenie zapłaty (Włącz).\n";
-            $content .= "Nr 13: Polecenie zapłaty (Odwołaj).\n";
-            $content .= "Nr 14: Raport lokalowy (dla zarządców budynków).\n";
-            $content .= "Nr 15: REKLAMACJA usług/faktury.\n";
-            $content .= "Nr 16/17: Zgłoszenie szkody (ogólne/samochodowe).\n";
-            $content .= "Nr 18: AKTUALIZACJA DANYCH (tylko zmiana nazwiska/adresu tej samej osoby, NIE przepisanie umowy!).\n";
+            $content .= "=== B. UMOWY, ROZLICZENIA, REKLAMACJE (wnioski 10-18) ===\n";
+            $content .= "LINK: https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#umowy\n";
+            $content .= "- Nr 10: Zawarcie umowy (nowa umowa lub przepisanie) + Zał.1: Protokół zdawczo-odbiorczy\n";
+            $content .= "- Nr 11: Rozwiązanie umowy\n";
+            $content .= "- Nr 12: Polecenie zapłaty (włączenie)\n";
+            $content .= "- Nr 13: Odwołanie polecenia zapłaty\n";
+            $content .= "- Nr 14: Raport lokalowy\n";
+            $content .= "- Nr 15: Zgłoszenie reklamacji\n";
+            $content .= "- Nr 16: Zgłoszenie szkody (nie samochód)\n";
+            $content .= "- Nr 17: Zgłoszenie szkody samochodowej\n";
+            $content .= "- Nr 18: Wniosek o aktualizację danych Usługobiorcy (ZMIANA DANYCH: adres korespondencji, nazwisko, telefon, e-mail)\n\n";
             
-            $content .= "--- WODOMIERZE LOKALOWE I OGRODOWE (LISTA C) ---\n";
-            $content .= "Nr 21: Warunki techniczne na podliczniki w bloku (składa Zarządca).\n";
-            $content .= "Nr 22: Kontrola montażu w bloku (składa Zarządca).\n";
-            $content .= "Nr 23: WODOMIERZ OGRODOWY (Tylko pierwszy montaż! Wymianę zgłaszasz mailem bez wniosku).\n";
+            $content .= "WAŻNE - ZMIANA DANYCH USŁUGOBIORCY:\n";
+            $content .= "Zmiana adresu korespondencji, nazwiska, telefonu, e-maila = Wniosek nr 18 (Aktualizacja danych Usługobiorcy)\n";
+            $content .= "Link: https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#umowy\n\n";
             
-            $content .= "--- USŁUGI DODATKOWE (LISTA D i E) ---\n";
-            $content .= "Nr 24: Zlecenie usługi nietaryfowej (płatnej).\n";
-            $content .= "Nr 25: Umowa na projekt/budowę kanalizacji.\n";
-            $content .= "Nr 26: Kopie map archiwalnych.\n";
-            $content .= "Nr 27: Pobór wody z HYDRANTU.\n";
-            $content .= "Nr 32: Uzgodnienie projektu URZĄDZEŃ (sieci, nie przyłączy).\n";
-            $content .= "Nr 33/34: Odbiór techniczny URZĄDZEŃ.\n";
+            $content .= "=== C. WODOMIERZE LOKALOWE I OGRODOWE (wnioski 21-23) ===\n";
+            $content .= "LINK: https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#wodomierze\n";
+            $content .= "- Nr 21: Warunki montażu wodomierzy lokalowych\n";
+            $content .= "- Nr 22: Kontrola montażu wodomierzy lokalowych\n";
+            $content .= "- Nr 23: Wodomierz ogrodowy (pierwszy montaż)\n\n";
+            
+            $content .= "=== D. USŁUGI DODATKOWE (wnioski 24-27) ===\n";
+            $content .= "LINK: https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#uslugi\n";
+            $content .= "- Nr 24: Usługa nie objęta taryfą\n";
+            $content .= "- Nr 25: Umowa na budowę przyłącza kanalizacyjnego\n";
+            $content .= "- Nr 26: Kopia dokumentacji archiwalnej\n";
+            $content .= "- Nr 27: Pobór wody z hydrantu\n\n";
+            
+            $content .= "=== E. BUDOWA URZĄDZEŃ (wnioski 31-34) ===\n";
+            $content .= "LINK: https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#budowaUrzadzen\n";
+            $content .= "- Nr 31: Warunki techniczne wykonania urządzeń\n";
+            $content .= "- Nr 32: Uzgodnienie dokumentacji projektowej urządzeń\n";
+            $content .= "- Nr 33: Kontrola i odbiór techniczny urządzeń wod-kan\n";
+            $content .= "- Nr 34: Protokół odbioru technicznego urządzeń wod-kan\n\n";
+            
+            $content .= "=== F. BUDOWA OBIEKTÓW BUDOWLANYCH (wnioski 41-42) ===\n";
+            $content .= "LINK: https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#budowaObiektow\n";
+            $content .= "- Nr 41: Warunki techniczne na przebudowę urządzeń\n";
+            $content .= "- Nr 42: Uzgodnienie rozwiązań projektowych\n\n";
+            
+            $content .= "JAK ZŁOŻYĆ: Wyślij skan na bok@pewik.gdynia.pl lub przez e-BOK. Nie musisz przychodzić!\n";
+            $content .= "NIE WIESZ JAKI WNIOSEK? Napisz na bok@pewik.gdynia.pl - pomożemy wybrać właściwy.\n";
         }
 
-        // 5. FINANSE - CENY I RYCZAŁT (DODANO 'STAWKI' I 'OPŁATY')
-        if ($this->contains_any($msg, ['cen', 'koszt', 'taryf', 'faktur', 'płatnoś', 'ile płacę', 'ryczałt', 'norm', 'bez liczni', 'stawk', 'opłat', 'wysokoś'])) {
-            $content .= "TEMAT: CENY, STAWKI I RYCZAŁT\n";
-            $content .= "Gdzie znaleźć stawki?: [CENY I TARYFY](https://pewik.gdynia.pl/strefa-klienta/ceny-i-taryfy/).\n";
-            $content .= "Dla kogo?: Wybierz 'Lista A' dla Gdyni/Rumi/Redy lub 'Lista C' dla Gminy Puck. Znajdziesz tam szczegółowe tabele opłat.\n";
-            $content .= "Ryczałt: Przy braku licznika płacisz wg norm zużycia.\n";
+        // =====================================================
+        // SEKCJA 5: CENY I TARYFY
+        // =====================================================
+        if ($this->contains_any($msg, ['cen', 'koszt', 'taryf', 'faktur', 'płatnoś', 'ile płacę', 'ryczałt', 'norm', 'bez liczni', 'stawk', 'opłat', 'wysokoś', 'ile kosztuje', 'drogo', 'tanio', 'wod'])) {
+            $content .= "TEMAT: CENY WODY I ŚCIEKÓW\n";
+            $content .= "LINK DO CEN (użyj tego!): https://pewik.gdynia.pl/strefa-klienta/ceny-i-taryfy/\n";
+            $content .= "Taryfy:\n";
+            $content .= "- Lista A: Gdynia, Rumia, Reda\n";
+            $content .= "- Lista C: Gmina Puck\n";
+            $content .= "Bez wodomierza: płatność wg ryczałtu (normy zużycia w taryfie).\n";
+            $content .= "UWAGA: Nie mamy kalkulatora online - sprawdź stawki w taryfie.\n";
         }
 
-        // 6. WODOMIERZE I ODCZYTY (ZAKTUALIZOWANE)
+        // =====================================================
+        // SEKCJA 6: INWESTYCJE I BUDOWY SIECI
+        // =====================================================
+        if ($this->contains_any($msg, ['inwestycj', 'budow', 'buduj', 'kopią', 'kopie', 'wykop', 'roboty', 'prace', 'remont', 'modernizacj', 'rozbudow', 'nowa sieć', 'nową sieć', 'nowej sieci', 'planowane', 'planują', 'będzie', 'kiedy będzie', 'przed domem', 'przy ulicy', 'na ulicy', 'w mojej okolicy', 'sieć wodociągow', 'sieć kanalizacyj'])) {
+            $content .= "TEMAT: INWESTYCJE I BUDOWA SIECI WODNO-KANALIZACYJNEJ\n";
+            
+            $content .= "--- GDZIE SPRAWDZIĆ AKTUALNE INWESTYCJE? ---\n";
+            $content .= "Wszystkie informacje o prowadzonych i planowanych inwestycjach znajdziesz na stronie: [INWESTYCJE PEWIK](https://pewik.gdynia.pl/strefa-mieszkanca/inwestycje/)\n";
+            $content .= "Na tej stronie możesz sprawdzić:\n";
+            $content .= "- Aktualne budowy sieci wodociągowej i kanalizacyjnej\n";
+            $content .= "- Planowane inwestycje w poszczególnych miejscowościach\n";
+            $content .= "- Harmonogramy prac\n";
+            $content .= "- Informacje o utrudnieniach\n";
+            
+            $content .= "--- ZASIĘG DZIAŁANIA PEWIK ---\n";
+            $content .= "PEWIK prowadzi inwestycje na terenie: Gdyni, Rumi, Redy, Wejherowa, Kosakowa i okolic.\n";
+            
+            $content .= "--- CHCESZ PRZYŁĄCZYĆ SIĘ DO NOWEJ SIECI? ---\n";
+            $content .= "Jeśli w Twojej okolicy powstaje nowa sieć i chcesz się przyłączyć, złóż wniosek o warunki przyłączenia: [Formularze](https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/)\n";
+            
+            $content .= "--- KONTAKT W SPRAWIE INWESTYCJI ---\n";
+            $content .= "Szczegółowe pytania o konkretne inwestycje: Dział Techniczny lub BOK tel. +48 58 66 87 311, e-mail: bok@pewik.gdynia.pl\n";
+        }
+
+        // =====================================================
+        // SEKCJA 7: WODOMIERZE I ODCZYTY
+        // =====================================================
         if ($this->contains_any($msg, ['licznik', 'wodomierz', 'odczyt', 'ogród', 'legalizac', 'wymian', 'mróz', 'zamarz', 'podlicznik', 'studzienk', 'stan', 'podaj', 'przekaz'])) {
             $content .= "TEMAT: WODOMIERZE I ODCZYTY\n";
             
-            // Metody podawania odczytu
             $content .= "--- JAK PODAĆ ODCZYT? ---\n";
             $content .= "Masz 4 sposoby:\n";
             $content .= "1. [e-Odczyt](https://pewik.gdynia.pl/e-odczyt) (bez logowania).\n";
@@ -234,14 +938,31 @@ class PEWIK_Chatbot_API {
             $content .= "3. SMS (instrukcja na stronie).\n";
             $content .= "4. Teleodczyt (Voicebot): zadzwoń i podaj stan głosowo.\n";
             
-            // Odpowiedzialność
-            $content .= "--- ODPOWIEDZIALNOŚĆ ---\n";
-            $content .= "Główny: Wymiana/Legalizacja przez PEWIK (bezpłatnie).\n";
-            $content .= "Ogrodowy (Podlicznik): Własność KLIENTA. Zakup, montaż, legalizacja (co 5 lat) i wymiana na koszt KLIENTA.\n";
-            $content .= "Zima: Jeśli licznik pęknie od mrozu -> PŁACI KLIENT.\n";
+            $content .= "--- WYMIANA WODOMIERZA GŁÓWNEGO ---\n";
+            $content .= "Wodomierz główny jest własnością PEWIK. Wymieniamy go BEZPŁATNIE gdy:\n";
+            $content .= "- Kończy się okres legalizacji (co 5 lat)\n";
+            $content .= "- Jest uszkodzony z przyczyn naturalnych\n";
+            $content .= "Nie musisz składać wniosku - sami się z Tobą skontaktujemy przed końcem legalizacji.\n";
+            $content .= "Jeśli uważasz że wodomierz źle liczy - zgłoś to mailowo na bok@pewik.gdynia.pl lub telefonicznie: +48 58 66 87 311.\n";
+            
+            $content .= "--- WYMIANA WODOMIERZA OGRODOWEGO ---\n";
+            $content .= "Wodomierz ogrodowy (podlicznik) jest własnością KLIENTA.\n";
+            $content .= "Procedura wymiany:\n";
+            $content .= "1. Kup nowy wodomierz z ważną cechą legalizacyjną\n";
+            $content .= "2. Wymień wodomierz (sam lub hydraulik)\n";
+            $content .= "3. Wyślij e-mail na bok@pewik.gdynia.pl zgłaszając gotowość do oplombowania\n";
+            $content .= "4. Umówimy się na kontrolę i założenie plomby\n";
+            $content .= "Koszt wymiany i legalizacji ponosi KLIENT.\n";
+            
+            $content .= "--- ODPOWIEDZIALNOŚĆ ZA WODOMIERZE ---\n";
+            $content .= "GŁÓWNY: Własność PEWIK - wymiana/legalizacja BEZPŁATNA.\n";
+            $content .= "OGRODOWY: Własność KLIENTA - zakup, montaż, legalizacja na koszt klienta.\n";
+            $content .= "UWAGA: Jeśli wodomierz pęknie z powodu mrozu (niezabezpieczony) - klient płaci za naprawę!\n";
         }
         
-        // 7. E-BOK (ZNACZNIE ROZBUDOWANA SEKCJA)
+        // =====================================================
+        // SEKCJA 8: E-BOK
+        // =====================================================
         if ($this->contains_any($msg, ['logow', 'rejestrac', 'hasł', 'e-bok', 'ebok', 'problem', 'e-faktur', 'efaktur', 'na maila', 'sms', 'powiadom', 'saldo', 'konto', 'internetow'])) {
             $content .= "TEMAT: E-BOK (Elektroniczne Biuro Obsługi Klienta)\n";
             
@@ -260,8 +981,10 @@ class PEWIK_Chatbot_API {
             $content .= "Chcesz SMS o fakturze?: Wypełnij osobny formularz: [Formularz SMS](https://app.bluealert.pl/pewikgdynia/users/simple-register/).\n";
         }
 
-        // 8. DANE ADRESOWE I KONTAKT (ZAKTUALIZOWANE)
-if ($this->contains_any($msg, ['adres', 'siedzib', 'gdzie', 'dojazd', 'ulic', 'biur', 'lokalizacj', 'kontakt', 'telefon', 'godziny', 'otwarte', 'czynne', 'mail', 'poczt', 'numer', 'zadzwonić', 'infolinia', 'rozmow', 'email' , 'wrzutnia'])) {
+        // =====================================================
+        // SEKCJA 9: DANE KONTAKTOWE
+        // =====================================================
+        if ($this->contains_any($msg, ['adres', 'siedzib', 'gdzie', 'dojazd', 'ulic', 'biur', 'lokalizacj', 'kontakt', 'telefon', 'godziny', 'otwarte', 'czynne', 'mail', 'poczt', 'numer', 'zadzwonić', 'infolinia', 'rozmow', 'email' , 'wrzutnia'])) {
             $content .= "TEMAT: DANE KONTAKTOWE I ADRESOWE\n";
             
             $content .= "--- TELEFON (Infolinia) ---\n";
@@ -272,7 +995,7 @@ if ($this->contains_any($msg, ['adres', 'siedzib', 'gdzie', 'dojazd', 'ulic', 'b
             $content .= "Adres: ul. Witomińska 21, 81-311 Gdynia\n";
             $content .= "Godziny: Pn-Pt 8:00 – 15:00\n";
 
-            $content .= "--- WIZYTA WRZUTNIA DOKUMENTÓW (Biuro Obsługi Klienta) ---\n";
+            $content .= "--- WRZUTNIA DOKUMENTÓW ---\n";
             $content .= "Wrzutnia dokumentów (przy wejściu): Pn-Pt 6:30 – 16:30.\n";
             
             $content .= "--- KANAŁY ELEKTRONICZNE (ZALECANE) ---\n";
@@ -281,19 +1004,69 @@ if ($this->contains_any($msg, ['adres', 'siedzib', 'gdzie', 'dojazd', 'ulic', 'b
             $content .= "Zasada: Zachęcamy do korzystania z e-maila i e-BOK zamiast wizyt papierowych.\n";
         }
 
-        // 9. WAŻNOŚĆ DOKUMENTÓW (NOWE - Decyzje, Warunki przyłączenia)
+        // =====================================================
+        // SEKCJA 10: WAŻNOŚĆ DOKUMENTÓW
+        // =====================================================
         if ($this->contains_any($msg, ['ważn', 'termin', 'decyzj', 'warunk', 'wygas', 'ile czas', 'daty', 'kiedy kończy', 'papiery'])) {
-            $content .= "TEMAT: WAŻNOŚĆ DOKUMENTÓW\nZASADA: Termin ważności każdego dokumentu (np. decyzji, warunków przyłączenia) jest szczegółowo określony w treści tego dokumentu. Proszę sprawdzić datę i termin bezpośrednio w posiadanym dokumencie.\n";
+            $content .= "TEMAT: WAŻNOŚĆ DOKUMENTÓW\n";
+            $content .= "ZASADA: Termin ważności każdego dokumentu (np. decyzji, warunków przyłączenia) jest szczegółowo określony w treści tego dokumentu. Proszę sprawdzić datę i termin bezpośrednio w posiadanym dokumencie.\n";
         }
 
-        // 10. WEZWANIA I BRAK DOKUMENTÓW (NOWE - FIX)
+        // =====================================================
+        // SEKCJA 11: WEZWANIA I BRAKUJĄCE DOKUMENTY
+        // =====================================================
         if ($this->contains_any($msg, ['wezwan', 'monit', 'zapłat', 'brak faktur', 'nie widzę', 'nie mam dokument', 'zgubiłem', 'zniszcz', 'duplikat', 'kopia'])) {
             $content .= "TEMAT: WEZWANIA DO ZAPŁATY I BRAKUJĄCE FAKTURY\n";
             $content .= "ZASADA: Wszystkie faktury (również te, których dotyczy wezwanie do zapłaty) są ZAWSZE dostępne w e-BOK.\n";
             $content .= "ROZWIĄZANIE: Zaloguj się do [e-BOK](https://pewik.gdynia.pl/ebok) i pobierz dokument. Nie musisz dzwonić do biura.\n";
+            $content .= "RATY: W wyjątkowych przypadkach możesz wystąpić o rozłożenie płatności na raty - szczegóły: https://pewik.gdynia.pl/strefa-klienta/splata-naleznosci/\n";
         }
 
-        // 11. KOREKTA FAKTURY (NOWE - FIX DLA "JAK ZROBIĆ KOREKTĘ")
+        // =====================================================
+        // SEKCJA 11B: SPŁATA NALEŻNOŚCI I RATY
+        // =====================================================
+        if ($this->contains_any($msg, ['raty', 'rata', 'ratach', 'rataln', 'spłat', 'należnoś', 'zaległ', 'dług', 'długi', 'nie zapłac', 'windykacj', 'odcięci', 'odcięcie', 'odłącz', 'wstrzym', 'blokad', 'zablokow', 'rozłożyć', 'rozłoż', 'rozłożenie', 'nie stać', 'trudna sytuacj', 'problem z płat', 'płatność na raty', 'spłacić', 'spłacać', 'zaległości'])) {
+            $content .= "TEMAT: SPŁATA NALEŻNOŚCI I ROZKŁADANIE NA RATY\n\n";
+            
+            $content .= "ODPOWIEDŹ NA PYTANIE O RATY (użyj tego tekstu w odpowiedzi):\n";
+            $content .= "W wyjątkowych przypadkach możesz wystąpić o rozłożenie płatności na raty. ";
+            $content .= "Wyślij pisemną prośbę na bok@pewik.gdynia.pl opisując swoją sytuację. ";
+            $content .= "Odpowiedź otrzymasz w terminie do 14 dni. ";
+            $content .= "Szczegóły procedury i wymagania znajdziesz tutaj: [Spłata należności](https://pewik.gdynia.pl/strefa-klienta/splata-naleznosci/)\n\n";
+            
+            $content .= "DODATKOWE INFO:\n";
+            $content .= "- Każdy wniosek rozpatrywany indywidualnie (historia rozliczeń, sytuacja klienta, zużycie)\n";
+            $content .= "- Przed odcięciem wody: powiadomienie min. 20 dni wcześniej\n";
+            $content .= "- Opłaty za wezwania i odcięcie: BEZPŁATNIE\n";
+        }
+
+        // =====================================================
+        // SEKCJA 11C: ZWROT NADPŁATY
+        // =====================================================
+        if ($this->contains_any($msg, ['nadpłat', 'nadplat', 'zwrot', 'zwrotu', 'przelew', 'oddać', 'oddac', 'za dużo zapłac', 'więcej niż', 'nadwyżk'])) {
+            $content .= "TEMAT: ZWROT NADPŁATY\n";
+            $content .= "LINK: https://pewik.gdynia.pl/strefa-klienta/nadplata/\n\n";
+            
+            $content .= "--- JAK UZYSKAĆ ZWROT NADPŁATY? ---\n";
+            $content .= "Wyślij e-mail na: windykacja@pewik.gdynia.pl (z kopią do bok@pewik.gdynia.pl)\n";
+            $content .= "W wiadomości podaj:\n";
+            $content .= "- Kwotę nadpłaty do zwrotu\n";
+            $content .= "- Numer konta bankowego do przelewu\n";
+            $content .= "- Twój kod nabywcy\n\n";
+            
+            $content .= "--- WAŻNE INFORMACJE ---\n";
+            $content .= "- Wysokość nadpłaty widoczna na fakturach oraz w e-BOK (zakładka 'Faktury i salda')\n";
+            $content .= "- Termin odpowiedzi: do 14 dni od otrzymania prośby\n";
+            $content .= "- Nadpłaty niezwrócone zaliczane są na poczet przyszłych zobowiązań\n";
+            $content .= "- Prośbę o zwrot może złożyć Usługobiorca (osoba na umowie)\n";
+            $content .= "- Opłaty za zwrot: BEZPŁATNIE\n\n";
+            
+            $content .= "Szczegóły: [Zwrot nadpłaty](https://pewik.gdynia.pl/strefa-klienta/nadplata/)\n";
+        }
+
+        // =====================================================
+        // SEKCJA 12: KOREKTA FAKTURY / REKLAMACJA
+        // =====================================================
         if ($this->contains_any($msg, ['korekt', 'skoryg', 'błąd', 'pomyłk', 'zły odczyt', 'zła faktur', 'reklamac'])) {
             $content .= "TEMAT: KOREKTA FAKTURY / REKLAMACJA\n";
             $content .= "PROCEDURA: Wyślij e-mail na bok@pewik.gdynia.pl. W wiadomości musisz podać 3 rzeczy:\n";
@@ -302,21 +1075,27 @@ if ($this->contains_any($msg, ['adres', 'siedzib', 'gdzie', 'dojazd', 'ulic', 'b
             $content .= "3. Aktualne wskazanie wodomierza (stan licznika).\n";
         }
 
-        // 12. ROZLICZENIA I SZACUNKI (ROZBUDOWANE)
+        // =====================================================
+        // SEKCJA 13: ROZLICZENIA I SZACUNKI
+        // =====================================================
         if ($this->contains_any($msg, ['rozlicz', 'szacunk', 'prognoz', 'dlaczego tak dużo', 'stan licznik', 'nie było mnie'])) {
             $content .= "TEMAT: ROZLICZENIA I FAKTURY SZACUNKOWE\n";
             $content .= "Dlaczego szacunek? Bo nie znamy Twojego odczytu (brak dostępu pracownika).\n";
             $content .= "Rozwiązanie: Przekaż odczyt samodzielnie (przez e-BOK, e-Odczyt, SMS) w swoim okresie obrachunkowym.\n";
         }
 
-        // 13. POLECENIE ZAPŁATY (NOWE)
-        if ($this->contains_any($msg, ['polecen', 'zapłat', 'automatycz', 'z konta', 'samo się', 'anulow'])) {
+        // =====================================================
+        // SEKCJA 14: POLECENIE ZAPŁATY
+        // =====================================================
+        if ($this->contains_any($msg, ['poleceni', 'polecenie zapłaty', 'automatycz', 'z konta', 'samo się', 'anulow', 'stałe zleceni'])) {
             $content .= "TEMAT: POLECENIE ZAPŁATY\n";
             $content .= "Aktywacja (Włącz): Wyślij do nas Wniosek nr 12. My załatwimy autoryzację w banku (trwa do 30 dni).\n";
             $content .= "Rezygnacja (Wyłącz): Wyślij Wniosek nr 13 (min. 14 dni przed terminem).\n";
         }
 
-        // 14. SAMODZIELNE FAKTUROWANIE (NOWE)
+        // =====================================================
+        // SEKCJA 15: SAMODZIELNE FAKTUROWANIE
+        // =====================================================
         if ($this->contains_any($msg, ['sam wystaw', 'samodzieln', 'rzeczywist', 'fakturowa'])) {
             $content .= "TEMAT: SAMODZIELNE FAKTUROWANIE (ROZLICZENIA RZECZYWISTE)\n";
             $content .= "Co to jest? Usługa w e-BOK pozwalająca samemu wystawiać faktury (unikasz szacunków).\n";
@@ -324,8 +1103,24 @@ if ($this->contains_any($msg, ['adres', 'siedzib', 'gdzie', 'dojazd', 'ulic', 'b
             $content .= "Wymagania: Musisz mieć aktywne konto e-BOK i zgodę na e-fakturę.\n";
         }
 
-        // 15. WŁADZE SPÓŁKI I STRUKTURA WŁASNOŚCIOWA (NOWE - BIP)
-        if ($this->contains_any($msg, ['zarząd', 'prezes', 'dyrektor', 'kierownik', 'władz', 'nadzorcz', 'rady', 'radą', 'rada', 'właściciel', 'udziałow', 'wspólni', 'gmin', 'kto rządzi', 'skład', 'osoby'])) {
+        // =====================================================
+        // SEKCJA 16: WŁADZE SPÓŁKI
+        // =====================================================
+        // Dodano imiona i nazwiska osób z firmy jako słowa kluczowe
+        if ($this->contains_any($msg, [
+            'zarząd', 'prezes', 'dyrektor', 'kierownik', 'władz', 'nadzorcz', 'rady', 'radą', 'rada', 
+            'właściciel', 'udziałow', 'wspólni', 'gmin', 'kto rządzi', 'skład', 'osoby',
+            'kim jest', 'kto to',
+            // Imiona i nazwiska osób z PEWIK
+            'kieloch', 'jacek kieloch',
+            'kujawski', 'wiesław kujawski',
+            'zawisza', 'marcin zawisza',
+            'lewandowska', 'anna lewandowska',
+            'kraszkiewicz', 'kamila kraszkiewicz',
+            'maciąg', 'karolina maciąg',
+            'galiński', 'łukasz galiński',
+            'skwarło', 'radosław skwarło'
+        ])) {
             $content .= "TEMAT: WŁADZE SPÓŁKI I STRUKTURA WŁASNOŚCIOWA (BIP)\n";
             
             $content .= "--- ZARZĄD SPÓŁKI ---\n";
@@ -345,18 +1140,22 @@ if ($this->contains_any($msg, ['adres', 'siedzib', 'gdzie', 'dojazd', 'ulic', 'b
             $content .= "Inni: KZG 'Dolina Redy i Chylonki', PFR (Fundusz Inwestycji Samorządowych).\n";
         }
 
-        // 16. DANE REJESTROWE I RACHUNEK BANKOWY (NOWE - BIP)
-        if ($this->contains_any($msg, ['nip', 'regon', 'krs', 'konto', 'bank', 'numer konta', 'przelew', 'dane firmy', 'faktur', 'pkd', 'działalnoś', 'czym się zajmuje'])) {
+        // =====================================================
+        // SEKCJA 17: DANE REJESTROWE
+        // =====================================================
+        if ($this->contains_any($msg, ['nip', 'regon', 'krs', 'konto', 'bank', 'numer konta', 'przelew', 'dane firmy', 'pkd', 'działalnoś', 'czym się zajmuje'])) {
             $content .= "TEMAT: DANE REJESTROWE I BANKOWE (BIP)\n";
             $content .= "Nazwa: Przedsiębiorstwo Wodociągów i Kanalizacji Sp. z o.o. w Gdyni.\n";
             $content .= "Siedziba: ul. Witomińska 29, 81-311 Gdynia.\n";
             $content .= "NIP: 586-010-44-34 | REGON: 190563879 | KRS: 0000126973.\n";
             $content .= "Konto Bankowe: Citibank Handlowy 89 1030 1120 0000 0000 0340 6701.\n";
-            $content .= "PKD (Główne): 36.00.Z (Woda), 37.00.Z (Ścieki). Pełna lista w BIP.\n";
+            $content .= "PKD (Główne): 36.00.Z (Pobór i uzdatnianie wody), 37.00.Z (Odprowadzanie i oczyszczanie ścieków).\n";
         }
 
-        // 17. SCHEMAT ORGANIZACYJNY (NOWE - VISIO)
-        if ($this->contains_any($msg, ['schemat', 'struktur', 'organizac', 'dział', 'pion', 'podlega', 'dyrektor', 'kierownik'])) {
+        // =====================================================
+        // SEKCJA 18: SCHEMAT ORGANIZACYJNY
+        // =====================================================
+        if ($this->contains_any($msg, ['schemat', 'struktur', 'organizac', 'dział', 'pion', 'podlega'])) {
             $content .= "TEMAT: SCHEMAT ORGANIZACYJNY SPÓŁKI\n";
             $content .= "ZARZĄD: Prezes (PZ), Wiceprezes (WZ).\n";
             
@@ -370,7 +1169,9 @@ if ($this->contains_any($msg, ['adres', 'siedzib', 'gdzie', 'dojazd', 'ulic', 'b
             $content .= "Jednostki: Dział Techniczny, Obsługa Inwestycji i Remontów, Laboratorium Wody i Ścieków, Dział Sprzętu, Utrzymanie Ruchu.\n";
         }
 
-        // 18. MAJĄTEK I FINANSE SPÓŁKI (KOMPLETNE DANE: Majątek + Wyniki + Podział zysku)
+        // =====================================================
+        // SEKCJA 19: MAJĄTEK I FINANSE
+        // =====================================================
         if ($this->contains_any($msg, ['kapitał', 'majątek', 'wartość', 'finans', 'pieniądz', 'środki trwałe', 'grunty', 'budynki', 'infrastruktura', 'ile warta', 'aktywa', 'zysk', 'dochód', 'strat', 'wynik finansow', 'ile zarabia', 'czy zarabia', 'kondycja', 'podział', 'przeznaczen', 'pokryci', 'zapasow', 'dywidend'])) {
             $content .= "TEMAT: MAJĄTEK, WYNIKI FINANSOWE I PODZIAŁ ZYSKU\n";
             
@@ -384,7 +1185,7 @@ if ($this->contains_any($msg, ['adres', 'siedzib', 'gdzie', 'dojazd', 'ulic', 'b
             $content .= "- Rok 2020: 9 347 635,14 zł\n";
             $content .= "- Rok 2019: 13 263 788,72 zł\n";
 
-            $content .= "--- PRZEZNACZENIE ZYSKU (CO ZROBIONO Z PIENIĘDZMI?) ---\n";
+            $content .= "--- PRZEZNACZENIE ZYSKU ---\n";
             $content .= "Decyzjami Zgromadzenia Wspólników zysk został rozdysponowany następująco:\n";
             $content .= "- Za rok 2023: W całości na pokrycie strat z lat ubiegłych.\n";
             $content .= "- Za rok 2022: W całości na pokrycie strat z lat ubiegłych.\n";
@@ -394,18 +1195,17 @@ if ($this->contains_any($msg, ['adres', 'siedzib', 'gdzie', 'dojazd', 'ulic', 'b
             
             $content .= "--- WARTOŚĆ MAJĄTKU TRWAŁEGO (Stan na 31.12.2023 r.) ---\n";
             $content .= "Majątek OGÓŁEM: Wartość Brutto: 1 474 498 183,84 zł | Wartość Netto: 627 423 606,23 zł.\n";
-            $content .= "Struktura majątku (Szczegóły):\n";
-            $content .= "1. Wartości niematerialne i prawne: Brutto 25,6 mln zł.\n";
-            $content .= "2. Środki trwałe (RAZEM): Brutto 1,446 mld zł. W tym główne składniki:\n";
-            $content .= "   - Obiekty inżynierii lądowej i wodnej: ~1,05 mld zł (brutto).\n";
-            $content .= "   - Budynki i lokale: ~131,7 mln zł (brutto).\n";
-            $content .= "   - Urządzenia techniczne i maszyny: ~131,5 mln zł (brutto).\n";
-            $content .= "   - Grunty: ~37,8 mln zł (brutto).\n";
-            $content .= "3. Niskocenne składniki rzeczowe: Brutto 2,8 mln zł.\n";
         }
         
-        // STOPKA - Zawsze dodajemy poprawny adres, aby model nie halucynował innej firmy
-        $content .= "\n---\nDANE FIRMY: PEWIK GDYNIA, ul. Witomińska 21, 81-311 Gdynia.\nTELEFON: +48 58 66 87 311 (czynny 7:00-15:00). EMAIL: bok@pewik.gdynia.pl";
+        // =====================================================
+        // STOPKA - ZAWSZE DODAWANA
+        // =====================================================
+        $content .= "\n---\n";
+        $content .= "OBSŁUGA ELEKTRONICZNA (PRIORYTET): e-mail: bok@pewik.gdynia.pl | e-BOK: https://pewik.gdynia.pl/ebok\n";
+        $content .= "Formularze i wnioski: https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/\n";
+        $content .= "Telefon (gdy sprawa pilna): +48 58 66 87 311 (Pn-Pt 7:00-15:00)\n";
+        $content .= "AWARIE 24h: 994\n";
+        $content .= "Adres: ul. Witomińska 21, 81-311 Gdynia";
 
         return $content;
     }
@@ -417,47 +1217,139 @@ if ($this->contains_any($msg, ['adres', 'siedzib', 'gdzie', 'dojazd', 'ulic', 'b
         return false;
     }
 
-/**
-     * ZAPYTANIE DO ORACLE (Wersja Zbalansowana: Naturalny język + Konkret)
-     */
-    private function call_cohere_model($user_message, $knowledge_context) {
-    
-    // PREAMBUŁA - ZBALANSOWANA
-    $system_preamble = "Jesteś pomocnym asystentem PEWIK Gdynia.
-ZASADY KOMUNIKACJI:
-1. Odpowiadaj na pytania PEŁNYMI ZDANIAMI. Unikaj odpowiedzi jednowyrazowych.
-2. Bazuj TYLKO na dostarczonej WIEDZY. Jeśli czegoś nie wiesz, napisz to wprost.
-3. NIE zmyślaj linków URL.
-4. Bądź uprzejmy i rzeczowy.
-5. WAŻNE: Nie kończ każdej wypowiedzi formułką 'skontaktuj się z BOK'. Odsyłaj do kontaktu tylko wtedy, gdy problem tego wymaga (np. awaria, skomplikowana sprawa).
+    // =====================================================
+    // WYWOŁANIE MODELU AI (ULEPSZONA PREAMBUŁA)
+    // =====================================================
 
-WIEDZA:
+    private function call_cohere_model($user_message, $knowledge_context, $chat_history = array()) {
+    
+        // PREAMBUŁA - ROZBUDOWANA O ZAKRES DZIAŁALNOŚCI
+        $system_preamble = "Jesteś pomocnym asystentem PEWIK Gdynia - przedsiębiorstwa wodociągów i kanalizacji.
+
+=== TWÓJ ZAKRES KOMPETENCJI ===
+Możesz pomagać TYLKO w sprawach dotyczących:
+✓ Wody ZIMNEJ (dostawy, awarie, jakość, ciśnienie)
+✓ Kanalizacji (ścieki, odprowadzanie, zapchania sieci miejskiej)
+✓ Wodomierzy (odczyty, wymiana, legalizacja)
+✓ Faktur i płatności za wodę/ścieki
+✓ Wniosków i formularzy PEWIK
+✓ Przyłączy wodno-kanalizacyjnych
+
+NIE ZAJMUJESZ SIĘ (i nie udzielasz porad w tych sprawach):
+✗ Ciepłą wodą (to sprawa administratora budynku, spółdzielni, wspólnoty lub dostawcy ciepła)
+✗ Ogrzewaniem / CO (administrator, dostawca ciepła)
+✗ Gazem (operator sieci gazowej, pogotowie gazowe)
+✗ Prądem (operator sieci energetycznej)
+✗ Wywozem śmieci (urząd miasta/gminy)
+
+WAŻNE: Gdy temat jest poza zakresem PEWIK, NIE podawaj konkretnych nazw firm, numerów telefonów ani adresów innych instytucji - używaj ogólnych określeń (administrator, dostawca, operator, urząd).
+
+=== ZASADY KOMUNIKACJI ===
+1. Odpowiadaj PEŁNYMI ZDANIAMI, naturalnie i uprzejmie.
+2. Bazuj TYLKO na dostarczonej WIEDZY. Jeśli czegoś nie wiesz, napisz to wprost.
+3. KRYTYCZNE: NIE wymyślaj linków URL! Używaj TYLKO linków które widzisz w sekcji WIEDZA poniżej. Jeśli nie ma linka w WIEDZY - nie podawaj żadnego linka, tylko nazwij stronę słownie.
+4. Jeśli pytanie dotyczy tematu POZA Twoim zakresem, grzecznie wyjaśnij że PEWIK tym się nie zajmuje.
+
+=== LINKI - ABSOLUTNY ZAKAZ WYMYŚLANIA ===
+DOZWOLONE linki (tylko te!):
+- Formularze (strona główna): https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/
+- Formularze - Przyłączenia (A): https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#przylaczenia
+- Formularze - Umowy/Reklamacje (B): https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#umowy
+- Formularze - Wodomierze (C): https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#wodomierze
+- Formularze - Usługi dodatkowe (D): https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#uslugi
+- Formularze - Budowa urządzeń (E): https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#budowaUrzadzen
+- Formularze - Budowa obiektów (F): https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#budowaObiektow
+- Ceny i taryfy: https://pewik.gdynia.pl/strefa-klienta/ceny-i-taryfy/
+- Spłata należności i raty: https://pewik.gdynia.pl/strefa-klienta/splata-naleznosci/
+- Zwrot nadpłaty: https://pewik.gdynia.pl/strefa-klienta/nadplata/
+- Awarie: https://pewik.gdynia.pl/awarie/planowane-wylaczenia/
+- Inwestycje: https://pewik.gdynia.pl/strefa-mieszkanca/inwestycje/
+- e-BOK: https://pewik.gdynia.pl/ebok
+- e-Odczyt: https://pewik.gdynia.pl/e-odczyt
+- RODO/Prywatność: https://pewik.gdynia.pl/rodo/
+Jeśli potrzebujesz innego linka - NIE WYMYŚLAJ GO. Napisz 'szczegóły na stronie PEWIK' bez podawania adresu.
+
+=== ZWIĘZŁOŚĆ ODPOWIEDZI (BARDZO WAŻNE!) ===
+1. Odpowiadaj KRÓTKO i KONKRETNIE - maksymalnie 3-5 zdań dla prostych pytań.
+2. NIE rozpisuj się - użytkownik chce szybkiej odpowiedzi, nie eseju.
+3. Dla procedur wieloetapowych (np. przyłącze) - podaj TYLKO PIERWSZY KROK + link do pełnej listy wniosków.
+4. NIE powtarzaj informacji, które już podałeś.
+5. NIE dodawaj zbędnych wstępów typu 'Rozumiem, że...', 'Postaram się pomóc...' - CHYBA że użytkownik jest wyraźnie sfrustrowany.
+6. NIE wymyślaj usług które nie istnieją (np. 'kalkulator opłat', 'szacunkowe obliczenia').
+
+=== EMPATIA - TYLKO GDY POTRZEBNA ===
+Używaj empatycznych sformułowań TYLKO gdy użytkownik:
+- Używa wykrzykników, caps locka, wulgaryzmów
+- Pisze że jest zdenerwowany, sfrustrowany, zły
+- Grozi skargą, mediami, prawnikiem
+W NORMALNYCH pytaniach - odpowiadaj rzeczowo, bez empatycznych wstępów.
+
+=== OBSŁUGA TRUDNYCH SYTUACJI ===
+1. NIGDY nie sugeruj składania skarg, kontaktu z mediami, urzędami nadzoru itp.
+2. NIGDY nie odsyłaj na stronę internetową osoby która mówi że nie ma internetu - podaj TELEFON i ADRES.
+3. Gdy nie możesz pomóc - od razu podaj KONKRETNE dane kontaktowe (telefon: +48 58 66 87 311, adres: ul. Witomińska 21).
+
+=== MIESZANE PYTANIA (zimna + ciepła woda) ===
+Gdy użytkownik pyta o brak CAŁEJ wody (zimnej i ciepłej):
+- Dla ZIMNEJ: sprawdź czy to awaria sieciowa na https://pewik.gdynia.pl/awarie/ lub zadzwoń 994
+- Dla CIEPŁEJ: skontaktuj się z administratorem/wspólnotą/spółdzielnią
+NIE odsyłaj do dyspozytora PEWIK w sprawie ciepłej wody!
+
+=== PRIORYTET OBSŁUGI ===
+Gdy użytkownik pyta jak coś załatwić, ZAWSZE stosuj tę kolejność:
+1. NAJPIERW: Wskaż KONKRETNY wniosek/formularz (numer i nazwa) + link do pobrania
+2. POTEM: Wskaż że można wysłać e-mailem na bok@pewik.gdynia.pl lub przez e-BOK
+3. OSTATECZNIE: Kontakt telefoniczny/osobisty TYLKO gdy sprawa jest skomplikowana lub awaryjna
+
+NIGDY nie zaczynaj odpowiedzi od 'skontaktuj się z BOK' lub 'zadzwoń'. 
+ZAWSZE najpierw podaj konkretny formularz i gdzie go znaleźć!
+
+=== WIEDZA ===
 $knowledge_context";
 
-    $body = array(
-        'compartmentId' => $this->compartment_id,
-        'servingMode' => array(
-            'servingType' => 'ON_DEMAND',
-            'modelId' => $this->model_id
-        ),
-        'chatRequest' => array(
+        // Przygotuj chatHistory dla Cohere API
+        $cohere_chat_history = array();
+        if (!empty($chat_history) && is_array($chat_history)) {
+            foreach ($chat_history as $msg) {
+                // Cohere wymaga: role = 'USER' lub 'CHATBOT', message = treść
+                if (isset($msg['user_message']) && isset($msg['bot_response'])) {
+                    $cohere_chat_history[] = array(
+                        'role' => 'USER',
+                        'message' => $msg['user_message']
+                    );
+                    $cohere_chat_history[] = array(
+                        'role' => 'CHATBOT', 
+                        'message' => $msg['bot_response']
+                    );
+                }
+            }
+        }
+
+        $chat_request = array(
             'apiFormat' => 'COHERE',
             'message' => $user_message,
             'preambleOverride' => $system_preamble,
             
-            'maxTokens' => 600,
-            
-            // Temperature 0.3: Pozwala na budowanie ładnych zdań, ale nadal trzyma się faktów.
-            // (Wcześniej było 0.0 - co robiło z niego robota, a 1.0 to poeta-halucynator)
-            'temperature' => 0.3, 
-            
-            // TopP 0.70: Standardowa wartość dla naturalnej rozmowy.
-            'topP' => 0.70,
-            
+            'maxTokens' => 400,  // Zmniejszone dla krótszych odpowiedzi
+            'temperature' => 0.25,  // Niższa = bardziej deterministyczne, mniej wymyślania
+            'topP' => 0.65,
             'frequencyPenalty' => 0.0,
             'presencePenalty' => 0.0
-        )
-    );
+        );
+
+        // Dodaj chatHistory tylko jeśli nie jest pusta
+        if (!empty($cohere_chat_history)) {
+            $chat_request['chatHistory'] = $cohere_chat_history;
+        }
+
+        $body = array(
+            'compartmentId' => $this->compartment_id,
+            'servingMode' => array(
+                'servingType' => 'ON_DEMAND',
+                'modelId' => $this->model_id
+            ),
+            'chatRequest' => $chat_request
+        );
 
         $body_json = json_encode($body);
 
@@ -499,7 +1391,6 @@ $knowledge_context";
     private function build_response($message, $session_id, $start_time, $error = false) {
         $response_time = microtime(true) - $start_time;
         
-        // Jeśli nie ma session_id (pierwsze zapytanie), generujemy fake ID
         if (empty($session_id)) {
             $session_id = 'genai_' . uniqid();
         }
@@ -508,8 +1399,8 @@ $knowledge_context";
             'error' => $error,
             'message' => $message,
             'sessionId' => $session_id,
-            'messageId' => 0, // Placeholder - zostanie nadpisany prawdziwym ID z bazy
-            'responseTime' => $response_time, // Dodajemy czas odpowiedzi dla bazy danych
+            'messageId' => 0,
+            'responseTime' => $response_time,
             'hasTrace' => false,
             'hasCitations' => false
         );
@@ -518,7 +1409,6 @@ $knowledge_context";
     private function format_headers_for_wp($headers) {
         $wp_headers = array();
         foreach ($headers as $key => $value) {
-            // Zamiana nagłówków na małe litery dla spójności
             $wp_headers[strtolower($key)] = $value;
         }
         return $wp_headers;
