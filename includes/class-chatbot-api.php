@@ -58,7 +58,7 @@ class PEWIK_Chatbot_API {
             'response' => "PEWIK Gdynia **nie zajmuje się dostarczaniem ciepłej wody**. Dostarczamy wyłącznie wodę zimną (wodociągi) i odbieramy ścieki (kanalizacja).\n\n**Gdzie zgłosić problem z ciepłą wodą?**\n- **W bloku/mieszkaniu**: Skontaktuj się z **administratorem budynku**, **spółdzielnią** lub **wspólnotą mieszkaniową**\n- **W domu jednorodzinnym**: Problem dotyczy Twojej instalacji wewnętrznej – wezwij **hydraulika** lub sprawdź swoje urządzenie grzewcze (piec, bojler)\n- **Ciepło sieciowe**: Jeśli korzystasz z miejskiej sieci ciepłowniczej, skontaktuj się z **dostawcą ciepła** w Twoim rejonie"
         ),
         'ogrzewanie' => array(
-            'keywords' => ['ogrzewanie', 'kaloryfer', 'grzejnik', 'piec', 'centralne ogrzewanie', 'c.o.', 'ciepło', 'zimno w mieszkaniu', 'nie grzeje'],
+            'keywords' => ['ogrzewani', 'kaloryfer', 'grzejnik', 'piec', 'centralne ogrzewanie', 'c.o.', 'ciepło', 'zimno w mieszkaniu', 'nie grzeje', 'nie działają kaloryfer', 'nie działa kaloryfer', 'nie grzeją', 'zimne kaloryfer', 'zimne grzejnik'],
             'response' => "PEWIK Gdynia **nie zajmuje się ogrzewaniem ani ciepłem**. Dostarczamy wyłącznie wodę zimną i odbieramy ścieki.\n\n**Gdzie zgłosić problem z ogrzewaniem?**\n- **Ciepło sieciowe**: Skontaktuj się z **dostawcą ciepła** w Twoim rejonie\n- **Ogrzewanie w bloku**: **Administrator budynku**, **spółdzielnia** lub **wspólnota mieszkaniowa**\n- **Własny piec/kocioł**: Serwis Twojego urządzenia grzewczego"
         ),
         'gaz' => array(
@@ -268,34 +268,33 @@ class PEWIK_Chatbot_API {
             return $this->build_response($restricted_check, $session_id, $start_time);
         }
 
-        // 1C. Dane osobowe - INTELIGENTNA OBSŁUGA
+        // 1C. OUT OF SCOPE - Tematy POZA kompetencjami PEWIK
+        // WAŻNE: Musi być PRZED is_sensitive_data() żeby matchować kaloryfery, gaz, prąd itp.
+        $out_of_scope_check = $this->check_out_of_scope($user_message);
+        if ($out_of_scope_check !== false) {
+            return $this->build_response($out_of_scope_check, $session_id, $start_time);
+        }
+
+        // 1D. Dane osobowe - INTELIGENTNA OBSŁUGA
         // Zamiast blokować, rozpoznaj temat i pomóż klientowi
         if ($this->is_sensitive_data($user_message)) {
             $helpful_response = $this->get_sensitive_data_response($user_message);
             return $this->build_response($helpful_response, $session_id, $start_time);
         }
 
-        // 1D. Frustracja / Zdenerwowanie użytkownika - DEESKALACJA
+        // 1E. Frustracja / Zdenerwowanie użytkownika - DEESKALACJA
         $frustration_check = $this->check_user_frustration($user_message);
         if ($frustration_check !== false) {
             return $this->build_response($frustration_check, $session_id, $start_time);
         }
 
-        // 1E. Powitania
+        // 1F. Powitania
         if ($this->is_greeting($user_message)) {
             return $this->build_response(self::MANDATORY_GREETING, $session_id, $start_time);
         }
 
         // ---------------------------------------------------------
-        // 2. OUT OF SCOPE - Tematy POZA kompetencjami PEWIK
-        // ---------------------------------------------------------
-        $out_of_scope_check = $this->check_out_of_scope($user_message);
-        if ($out_of_scope_check !== false) {
-            return $this->build_response($out_of_scope_check, $session_id, $start_time);
-        }
-
-        // ---------------------------------------------------------
-        // 3. DOBÓR WIEDZY (Local RAG)
+        // 2. DOBÓR WIEDZY (Local RAG)
         // ---------------------------------------------------------
         $knowledge_context = $this->get_knowledge_context($user_message, $context);
 
