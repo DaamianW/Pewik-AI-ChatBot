@@ -150,6 +150,23 @@ class PEWIK_Chatbot_API {
             'link' => 'https://pewik.gdynia.pl/aktualnosci/',
             'link_text' => 'Aktualności PEWIK'
         ),
+        'weryfikacja_prac' => array(
+            'keywords' => [
+                // Weryfikacja autentyczności
+                'czy ta informacja jest prawdziwa', 'czy to prawda', 'czy to oszustwo', 'czy to fake',
+                'zweryfikować', 'potwierdzić', 'sprawdzić czy', 'autentyczn',
+                // Planowane wizyty/prace
+                'dostałem informację', 'dostałam informację', 'otrzymałem sms', 'otrzymałam sms',
+                'będzie wymieniany', 'będzie wymiana', 'przyjdzie monterr', 'przyjdzie pracownik',
+                'wizyta montera', 'wizyta pracownika', 'umówiona wizyta', 'termin wizyty',
+                'planowana wymiana', 'planowane prace', 'zapowiedział wizytę',
+                // Podejrzane kontakty
+                'dzwonił ktoś', 'zadzwonił ktoś', 'nieznany numer', 'podejrzany telefon', 'podejrzany sms'
+            ],
+            'title' => 'Weryfikacja planowanych prac i wizyt',
+            'link' => 'mailto:bok@pewik.gdynia.pl',
+            'link_text' => 'bok@pewik.gdynia.pl'
+        ),
         'inwestycje_aktualne' => array(
             'keywords' => ['aktualne inwestycje', 'bieżące inwestycje', 'co budujecie', 'gdzie budujecie', 'kiedy skończycie budowę', 'harmonogram prac budowlanych', 'etap budowy', 'postęp prac', 'termin zakończenia inwestycji', 'plan inwestycyjny', 'jakie macie inwestycje'],
             'title' => 'Aktualne inwestycje',
@@ -665,6 +682,19 @@ class PEWIK_Chatbot_API {
             $response .= "\n---\n💧 Przepraszamy za utrudnienia.";
             return $response;
         }
+
+        // Specjalna odpowiedź dla weryfikacji planowanych prac/wizyt
+        if ($category === 'weryfikacja_prac') {
+            $response = "🔍 **Weryfikacja planowanych prac lub wizyt**\n\n";
+            $response .= "Nie posiadam dostępu do harmonogramu planowanych prac ani wizyt monterów. ";
+            $response .= "Nie jestem w stanie zweryfikować autentyczności otrzymanej informacji.\n\n";
+            $response .= "**Aby potwierdzić lub zweryfikować informację, skontaktuj się z Biurem Obsługi Klienta:**\n";
+            $response .= "📧 **bok@pewik.gdynia.pl**\n";
+            $response .= "📞 **+48 58 66 87 311** (pn-pt 7:00-15:00)\n\n";
+            $response .= "💡 **Wskazówka:** W wiadomości podaj szczegóły otrzymanej informacji (data, godzina, adres, numer telefonu nadawcy) – pracownicy BOK zweryfikują, czy planowana jest wizyta.\n";
+            $response .= "\n---\n💧 Dbaj o bezpieczeństwo – w razie wątpliwości zawsze weryfikuj!";
+            return $response;
+        }
         
         // Standardowa odpowiedź dla pozostałych restricted topics
         $response = "📋 **{$topic_data['title']}**\n\n";
@@ -927,7 +957,7 @@ class PEWIK_Chatbot_API {
         // =====================================================
         // SEKCJA 7: WODOMIERZE I ODCZYTY
         // =====================================================
-        if ($this->contains_any($msg, ['licznik', 'wodomierz', 'odczyt', 'ogród', 'legalizac', 'wymian', 'mróz', 'zamarz', 'podlicznik', 'studzienk', 'stan', 'podaj', 'przekaz'])) {
+        if ($this->contains_any($msg, ['licznik', 'wodomierz', 'odczyt', 'ogród', 'legalizac', 'wymian', 'mróz', 'zamarz', 'podlicznik', 'studzienk', 'stan', 'podaj', 'przekaz', 'remont', 'uszkodz', 'zepsut', 'pęknięt', 'rozbit'])) {
             $content .= "TEMAT: WODOMIERZE I ODCZYTY\n";
             
             $content .= "--- JAK PODAĆ ODCZYT? ---\n";
@@ -943,6 +973,9 @@ class PEWIK_Chatbot_API {
             $content .= "- Jest uszkodzony z przyczyn naturalnych\n";
             $content .= "Nie musisz składać wniosku - sami się z Tobą skontaktujemy przed końcem legalizacji.\n";
             $content .= "Jeśli uważasz że wodomierz źle liczy - zgłoś to mailowo na bok@pewik.gdynia.pl lub telefonicznie: +48 58 66 87 311.\n";
+            $content .= "WAŻNE - USZKODZENIE Z WINY KLIENTA:\n";
+            $content .= "Jeśli wodomierz został uszkodzony z winy klienta (np. podczas remontu, prac budowlanych, zamarznięcia z powodu braku zabezpieczenia), wymiana jest ODPŁATNA - klient pokrywa koszt nowego wodomierza i robocizny.\n";
+            $content .= "W takim przypadku zgłoś uszkodzenie: bok@pewik.gdynia.pl lub tel. +48 58 66 87 311.\n";
             
             $content .= "--- WYMIANA WODOMIERZA OGRODOWEGO ---\n";
             $content .= "Wodomierz ogrodowy (podlicznik) jest własnością KLIENTA.\n";
