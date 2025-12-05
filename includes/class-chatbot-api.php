@@ -268,7 +268,14 @@ class PEWIK_Chatbot_API {
         // 1. HARD RULES - PRIORYTET NAJWYŻSZY
         // ---------------------------------------------------------
         
-        // 1A. Sytuacje awaryjne (PEWIK)
+        // 1A. PYTANIA O STATUS SPRAWY / OCZEKIWANIE NA ODPOWIEDŹ
+        // Gdy klient pyta "kiedy dostanę odpowiedź", "czekam na odpowiedź", "jaki jest status" itp.
+        $status_check = $this->check_waiting_for_response($user_message);
+        if ($status_check !== false) {
+            return $this->build_response($status_check, $session_id, $start_time);
+        }
+
+        // 1B. Sytuacje awaryjne (PEWIK)
         if ($this->is_emergency($user_message)) {
             return $this->build_response(
                 "🛑 **STOP! To jest sprawa wymagająca natychmiastowej interwencji.**\n\nW przypadku awarii wodno-kanalizacyjnej natychmiast zadzwoń pod bezpłatny numer alarmowy **994**!",
@@ -277,7 +284,7 @@ class PEWIK_Chatbot_API {
             );
         }
 
-        // 1B. RESTRICTED BUSINESS TOPICS - Tematy wrażliwe biznesowo
+        // 1C. RESTRICTED BUSINESS TOPICS - Tematy wrażliwe biznesowo
         // Wymagające aktualnych danych z oficjalnych źródeł
         // WAŻNE: Musi być PRZED is_sensitive_data() żeby matchować pytania o RODO
         $restricted_check = $this->check_restricted_business_topic($user_message);
@@ -285,27 +292,27 @@ class PEWIK_Chatbot_API {
             return $this->build_response($restricted_check, $session_id, $start_time);
         }
 
-        // 1C. OUT OF SCOPE - Tematy POZA kompetencjami PEWIK
+        // 1D. OUT OF SCOPE - Tematy POZA kompetencjami PEWIK
         // WAŻNE: Musi być PRZED is_sensitive_data() żeby matchować kaloryfery, gaz, prąd itp.
         $out_of_scope_check = $this->check_out_of_scope($user_message);
         if ($out_of_scope_check !== false) {
             return $this->build_response($out_of_scope_check, $session_id, $start_time);
         }
 
-        // 1D. Dane osobowe - INTELIGENTNA OBSŁUGA
+        // 1E. Dane osobowe - INTELIGENTNA OBSŁUGA
         // Zamiast blokować, rozpoznaj temat i pomóż klientowi
         if ($this->is_sensitive_data($user_message)) {
             $helpful_response = $this->get_sensitive_data_response($user_message);
             return $this->build_response($helpful_response, $session_id, $start_time);
         }
 
-        // 1E. Frustracja / Zdenerwowanie użytkownika - DEESKALACJA
+        // 1F. Frustracja / Zdenerwowanie użytkownika - DEESKALACJA
         $frustration_check = $this->check_user_frustration($user_message);
         if ($frustration_check !== false) {
             return $this->build_response($frustration_check, $session_id, $start_time);
         }
 
-        // 1F. Powitania
+        // 1G. Powitania
         if ($this->is_greeting($user_message)) {
             return $this->build_response(self::MANDATORY_GREETING, $session_id, $start_time);
         }
@@ -335,6 +342,96 @@ class PEWIK_Chatbot_API {
     // =====================================================
     // METODY HARD RULES
     // =====================================================
+
+    /**
+     * Sprawdź czy użytkownik pyta o status sprawy / czeka na odpowiedź
+     * Wykrywa pytania typu: "kiedy dostanę odpowiedź", "czekam na odpowiedź", "jaki jest status mojej sprawy"
+     * 
+     * @param string $text Wiadomość użytkownika
+     * @return string|false Odpowiedź lub false jeśli nie dotyczy
+     */
+    private function check_waiting_for_response($text) {
+        $text_lower = mb_strtolower($text);
+        
+        // Słowa kluczowe wskazujące na oczekiwanie na odpowiedź / status sprawy
+        $waiting_keywords = [
+            // Oczekiwanie na odpowiedź
+            'kiedy dostanę odpowiedź',
+            'kiedy otrzymam odpowiedź',
+            'czekam na odpowiedź',
+            'oczekuję na odpowiedź',
+            'nie dostałem odpowiedzi',
+            'nie otrzymałem odpowiedzi',
+            'brak odpowiedzi',
+            'ile czekać na odpowiedź',
+            'jak długo czekać',
+            'kiedy odezwiecie',
+            'kiedy odpowiecie',
+            'kiedy się odezwiecie',
+            'dlaczego nie odpowiadacie',
+            'czemu nie odpowiadacie',
+            'nikt nie odpowiada',
+            'nikt mi nie odpowiedział',
+            
+            // Status sprawy
+            'jaki jest status',
+            'status mojej sprawy',
+            'status zgłoszenia',
+            'co z moją sprawą',
+            'co z moim zgłoszeniem',
+            'co z moim wnioskiem',
+            'na jakim etapie',
+            'etap realizacji',
+            'etap sprawy',
+            
+            // Wcześniejszy kontakt
+            'pisałem wcześniej',
+            'pisałam wcześniej',
+            'wysłałem wcześniej',
+            'wysłałam wcześniej',
+            'kontaktowałem się',
+            'kontaktowałam się',
+            'zgłaszałem',
+            'zgłaszałam',
+            'składałem wniosek',
+            'składałam wniosek',
+            'złożyłem wniosek',
+            'złożyłam wniosek'
+        ];
+        
+        foreach ($waiting_keywords as $keyword) {
+            if (strpos($text_lower, $keyword) !== false) {
+                return $this->get_waiting_response();
+            }
+        }
+        
+        // Dodatkowa heurystyka: "kiedy" + słowa związane z odpowiedzią/kontaktem
+        if (strpos($text_lower, 'kiedy') !== false) {
+            $response_words = ['odpowiedź', 'odpowiecie', 'odezwiecie', 'kontakt', 'informacj'];
+            foreach ($response_words as $word) {
+                if (strpos($text_lower, $word) !== false) {
+                    return $this->get_waiting_response();
+                }
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Odpowiedź dla osób czekających na odpowiedź / pytających o status sprawy
+     */
+    private function get_waiting_response() {
+        $response = "Nie mam dostępu do historii korespondencji ani statusu indywidualnych spraw.\n\n";
+        $response .= "**Aby sprawdzić status swojej sprawy:**\n";
+        $response .= "Wyślij e-mail na adres **bok@pewik.gdynia.pl** z zapytaniem o etap realizacji. ";
+        $response .= "W treści wiadomości podaj szczegóły poprzedniego zgłoszenia (datę, temat, numer sprawy jeśli posiadasz).\n\n";
+        $response .= "**Kontakt bezpośredni:**\n";
+        $response .= "Telefon: **+48 58 66 87 311** (pn-pt 7:00-15:00)\n\n";
+        $response .= "Pracownicy BOK sprawdzą status Twojej sprawy i udzielą informacji.";
+        
+        return $response;
+    }
 
     private function is_emergency($text) {
         $keywords = ['wyciek', 'leje się', 'zalewa', 'pękła rura', 'tryska', 'powódź', 'wybija'];
