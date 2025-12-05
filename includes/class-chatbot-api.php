@@ -1217,7 +1217,7 @@ class PEWIK_Chatbot_API {
         // =====================================================
         if ($this->contains_any($msg, ['nadpłat', 'nadplat', 'zwrot', 'zwrotu', 'przelew', 'oddać', 'oddac', 'za dużo zapłac', 'więcej niż', 'nadwyżk'])) {
             $content .= "TEMAT: ZWROT NADPŁATY\n";
-            $content .= "LINK: https://pewik.gdynia.pl/strefa-klienta/nadplata/\n\n";
+            $content .= "⚠️ UWAGA: NIE MA FORMULARZA do zwrotu nadpłaty! Nie wspominaj o żadnym formularzu!\n\n";
             
             $content .= "--- JAK UZYSKAĆ ZWROT NADPŁATY? ---\n";
             $content .= "Wyślij e-mail na: windykacja@pewik.gdynia.pl (z kopią do bok@pewik.gdynia.pl)\n";
@@ -1233,7 +1233,7 @@ class PEWIK_Chatbot_API {
             $content .= "- Prośbę o zwrot może złożyć Usługobiorca (osoba na umowie)\n";
             $content .= "- Opłaty za zwrot: BEZPŁATNIE\n\n";
             
-            $content .= "Szczegóły: [Zwrot nadpłaty](https://pewik.gdynia.pl/strefa-klienta/nadplata/)\n";
+            $content .= "Szczegółowa instrukcja: [Zwrot nadpłaty](https://pewik.gdynia.pl/strefa-klienta/nadplata/)\n";
         }
 
         // =====================================================
