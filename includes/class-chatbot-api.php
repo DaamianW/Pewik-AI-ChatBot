@@ -1040,14 +1040,14 @@ class PEWIK_Chatbot_API {
             $content .= "--- POWIADOMIENIA SMS ---\n";
             $content .= "Chcesz SMS o fakturze?: Wypełnij osobny formularz: [Formularz SMS](https://app.bluealert.pl/pewikgdynia/users/simple-register/).\n";
             
-            $content .= "--- INNE SPRAWY E-BOK (przypisanie wodomierza, łączenie kont, itp.) ---\n";
+            $content .= "--- INNE SPRAWY E-BOK (przypisanie, łączenie kont, itp.) ---\n";
             $content .= "⚠️ UWAGA: NIE MAM INFORMACJI o procedurach takich jak:\n";
-            $content .= "- Przypisanie/dodanie wodomierza do konta e-BOK\n";
-            $content .= "- Przypisanie konta / przypisanie punktu rozliczeniowego\n";
-            $content .= "- Połączenie konta / scalenie konta / łączenie kont w e-BOK\n";
-            $content .= "- Przenoszenie punktów rozliczeniowych między kontami\n";
-            $content .= "W tych sprawach ZAWSZE odsyłaj do kontaktu z BOK:\n";
-            $content .= "E-mail: bok@pewik.gdynia.pl | Telefon: +48 58 66 87 311 (pn-pt 7:00-15:00)\n";
+            $content .= "- Przypisanie do konta e-BOK (wodomierza, punktu, wspólnoty, spółdzielni itp.)\n";
+            $content .= "- Połączenie konta / scalenie konta / łączenie kont\n";
+            $content .= "- Przenoszenie między kontami\n";
+            $content .= "Dla WSZYSTKICH tych spraw odpowiadaj OGÓLNIE:\n";
+            $content .= "'Nie mam informacji na temat tej procedury. Proszę o kontakt z Biurem Obsługi Klienta: e-mail bok@pewik.gdynia.pl lub telefon +48 58 66 87 311 (pn-pt 7:00-15:00).'\n";
+            $content .= "NIE ZGADUJ czego dotyczy przypisanie! NIE wymieniaj konkretnie wodomierza/spółdzielni/punktu!\n";
         }
 
         // =====================================================
@@ -1324,20 +1324,19 @@ Gdy użytkownik pyta o procedurę, wniosek lub sprawę której NIE MA w sekcji W
 1. NIE WYMYŚLAJ odpowiedzi!
 2. NIE sugeruj wniosków których nie widzisz w WIEDZY!
 3. NIE zgaduj jaki formularz może być potrzebny!
-4. Zamiast tego ZAWSZE odpowiedz:
+4. NIE POWTARZAJ słów użytkownika w odpowiedzi (np. nie pisz "przypisanie wodomierza" jeśli użytkownik o to pytał)!
+5. Zamiast tego ZAWSZE odpowiedz OGÓLNIE:
    'Nie mam informacji na temat tej procedury. Proszę o kontakt z Biurem Obsługi Klienta:
    - e-mail: bok@pewik.gdynia.pl
    - telefon: +48 58 66 87 311 (pn-pt 7:00-15:00)
    Pracownicy BOK udzielą szczegółowych informacji.'
 
-PRZYKŁADY spraw których NIE MA w wiedzy (odpowiadaj że nie masz informacji):
-- Przypisanie/dodanie wodomierza do konta e-BOK
-- Przypisanie konta / przypisanie punktu rozliczeniowego
-- Połączenie konta / scalenie konta / łączenie kont w e-BOK
-- Zmiana hasła w e-BOK (jeśli nie opisana)
+PRZYKŁADY spraw których NIE MA w wiedzy (odpowiadaj OGÓLNIE że nie masz informacji):
+- Przypisanie czegokolwiek do konta e-BOK (wodomierza, punktu, wspólnoty, spółdzielni)
+- Połączenie/scalenie/łączenie kont w e-BOK
 - Inne nietypowe procedury
 
-PAMIĘTAJ: Lepiej powiedzieć 'nie wiem, skontaktuj się z BOK' niż podać BŁĘDNĄ informację!
+PAMIĘTAJ: Lepiej powiedzieć 'nie mam informacji na temat tej procedury' niż podać BŁĘDNĄ lub ZGADYWANĄ informację!
 
 === LINKI - ABSOLUTNY ZAKAZ WYMYŚLANIA ===
 DOZWOLONE linki (tylko te!):
