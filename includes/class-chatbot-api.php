@@ -132,22 +132,28 @@ class PEWIK_Chatbot_API {
                 'bakterie', 'bakteria', 'e.coli', 'ecoli', 'e-coli', 'escherichia', 
                 'skażen', 'skażon',  // skażenie, skażona, skażonej, skażony
                 'zanieczyszcz',      // zanieczyszczenie, zanieczyszczona, zanieczyszczonej
+                // Odkażanie i chlorowanie
+                'odkażan', 'odkazan', 'dezynfekc', 'chlorowan', 'chlor w wodzie', 'za dużo chloru', 'smakuje chlorem',
+                'jak długo odkażan', 'kiedy skończy się odkażan', 'ile trwa odkażan',
                 // Instrukcje kryzysowe
                 'zakaz picia', 'nie pić', 'przegotować', 'gotować wodę', 'przegotowywać', 'nie nadaje się do picia',
                 // Pytania o czas trwania incydentu
                 'jak długo potrwa', 'kiedy będzie zdatna', 'kiedy koniec', 'kiedy można pić', 'ile to potrwa',
+                'jak długo może trwać', 'ile jeszcze', 'kiedy wróci do normy', 'kiedy normalna',
                 // Odniesienia do komunikatów
                 'informacja na stronie', 'komunikat o wodzie', 'alert', 'ostrzeżenie o wodzie', 'aktualizacja statusu',
                 // Pytania o bieżącą sytuację (bardziej specyficzne - związane z wodą, nie licznikiem)
                 'sytuacja z wodą', 'jaka sytuacja z wodą', 'co z wodą', 'aktualny stan wody', 'czy można pić', 'można pić wodę',
                 'czy można się kąpać', 'można się kąpać', 'czy można się myć', 'można normalnie', 'czy jest bezpieczna',
                 'czy woda jest ok', 'czy woda jest dobra', 'co się dzieje z wodą', 'problem z wodą w',
+                'bieżący stan', 'bieżąca sytuacja', 'aktualna sytuacja', 'aktualny status',
+                'zdatna do użytkowania', 'zdatna do użytku', 'normalnego użytkowania',
                 // Odniesienia do komunikatów/informacji wydanych przez PEWIK
                 'wydali informację', 'wydaliście informację', 'informacja o wodzie', 'komunikat dotyczący',
                 'wyłączonych z pitnej', 'wyłączon'
             ],
             'title' => 'Bieżące zdarzenia dotyczące jakości wody',
-            'link' => 'https://pewik.gdynia.pl/aktualnosci/',
+            'link' => 'https://pewik.gdynia.pl/o-nas/aktualnosci/',
             'link_text' => 'Aktualności PEWIK'
         ),
         'weryfikacja_prac' => array(
@@ -772,12 +778,12 @@ class PEWIK_Chatbot_API {
     private function format_restricted_topic_response($topic_data, $category = '') {
         // Specjalna odpowiedź dla incydentów jakości wody
         if ($category === 'incydent_jakosc_wody') {
-            $response = "⚠️ **Bieżące zdarzenia dotyczące jakości wody**\n\n";
-            $response .= "Rozumiem, że pytasz o **aktualną sytuację** związaną z jakością wody. ";
-            $response .= "Nie posiadam informacji o bieżących zdarzeniach ani ich przewidywanym czasie trwania.\n\n";
-            $response .= "**Gdzie znajdziesz aktualne informacje:**\n";
-            $response .= "🔗 [Aktualności PEWIK](https://pewik.gdynia.pl/aktualnosci/) – tu publikujemy wszystkie komunikaty i aktualizacje\n";
-            $response .= "\n---\n💧 Przepraszamy za utrudnienia.";
+            $response = "Jestem wirtualnym asystentem i **nie posiadam aktualnych informacji** o bieżących zdarzeniach, awariach, odkażaniu wody ani przewidywanym czasie ich trwania.\n\n";
+            $response .= "**Aktualne informacje o stanie wody** są publikowane na bieżąco na stronie:\n";
+            $response .= "🔗 [Aktualności PEWIK](https://pewik.gdynia.pl/o-nas/aktualnosci/)\n\n";
+            $response .= "Tam znajdziesz wszystkie komunikaty dotyczące bieżącej sytuacji.\n\n";
+            $response .= "**Pytania ogólne o jakość wody** (parametry, twardość, czy można pić na co dzień):\n";
+            $response .= "🔗 [Jakość wody](https://pewik.gdynia.pl/strefa-mieszkanca/jakosc-wody/)";
             return $response;
         }
 
@@ -1421,7 +1427,7 @@ Gdy użytkownik pyta o procedurę, wniosek lub sprawę której NIE MA w sekcji W
 1. NIE WYMYŚLAJ odpowiedzi!
 2. NIE sugeruj wniosków których nie widzisz w WIEDZY!
 3. NIE zgaduj jaki formularz może być potrzebny!
-4. NIE POWTARZAJ słów użytkownika w odpowiedzi (np. nie pisz "przypisanie wodomierza" jeśli użytkownik o to pytał)!
+4. NIE POWTARZAJ słów użytkownika w odpowiedzi (np. nie pisz 'przypisanie wodomierza' jeśli użytkownik o to pytał)!
 5. Zamiast tego ZAWSZE odpowiedz OGÓLNIE:
    'Nie mam informacji na temat tej procedury. Proszę o kontakt z Biurem Obsługi Klienta:
    - e-mail: bok@pewik.gdynia.pl
