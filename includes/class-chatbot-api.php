@@ -381,7 +381,7 @@ class PEWIK_Chatbot_API {
         $sensitive_keywords = [
             'nazywam się', 'mieszkam przy', 'mój pesel', 'nr umowy', 'numer umowy', 
             'dowód osobisty', 'moje nazwisko', 'pesel', 'seria dowodu', 'nr klienta',
-            'jestem', 'mam na imię', 'moje imię', 'moje dane'
+            'mam na imię', 'moje imię', 'moje dane', 'jestem klientem', 'jestem właścicielem'
         ];
         
         foreach ($sensitive_keywords as $word) {
@@ -465,9 +465,10 @@ class PEWIK_Chatbot_API {
         }
         
         // 5. WODOMIERZ
-        if ($this->contains_any($text_lower, ['wodomierz', 'licznik', 'odczyt', 'wymian', 'plomb'])) {
-            return $warning . "**Sprawy wodomierzowe:**\n\n" .
-                "Wyślij e-mail na: **bok@pewik.gdynia.pl** opisując sprawę.\n\n" .
+        if ($this->contains_any($text_lower, ['wodomierz', 'licznik', 'odczyt', 'wymian', 'plomb', 'legalizac', 'oplomb'])) {
+            return $warning . "**Sprawy wodomierzowe (wymiana/oplombowanie):**\n\n" .
+                "📋 Szczegółowa instrukcja krok po kroku: [Wymiana wodomierza](https://pewik.gdynia.pl/wymiana)\n\n" .
+                "Wyślij e-mail na: **biuro@pewik.gdynia.pl** zgłaszając gotowość do oplombowania.\n\n" .
                 "📄 Formularze: [Wnioski dot. wodomierzy](https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#wodomierze)";
         }
         
@@ -984,21 +985,34 @@ class PEWIK_Chatbot_API {
             $content .= "W takim przypadku zgłoś uszkodzenie: bok@pewik.gdynia.pl lub tel. +48 58 66 87 311.\n";
             
             $content .= "--- OPLOMBOWANIE / UMÓWIENIE WIZYTY ---\n";
-            $content .= "⚠️ WAŻNE: Umówienie wizyty na oplombowanie wodomierza odbywa się WYŁĄCZNIE przez e-mail!\n";
-            $content .= "Adres: bok@pewik.gdynia.pl\n";
-            $content .= "W wiadomości podaj: adres nieruchomości, numer telefonu kontaktowego, preferowany termin.\n";
+            $content .= "⚠️ WAŻNE: Zgłoszenie gotowości do oplombowania wodomierza odbywa się WYŁĄCZNIE przez e-mail!\n";
+            $content .= "Adres: biuro@pewik.gdynia.pl\n";
+            $content .= "W wiadomości KONIECZNIE podaj:\n";
+            $content .= "- swój KOD NABYWCY,\n";
+            $content .= "- imię i nazwisko lub nazwę USŁUGOBIORCY,\n";
+            $content .= "- numer PUNKTU ROZLICZENIOWEGO lub adres montażu wodomierza,\n";
+            $content .= "- numer UMOWY,\n";
+            $content .= "- dane kontaktowe (numer telefonu).\n";
             $content .= "❌ NIE umawiamy wizyt telefonicznie!\n";
             $content .= "❌ NIE dzwoń w sprawie umówienia oplombowania - napisz e-mail!\n";
             $content .= "Dotyczy to: oplombowania, kontroli wodomierza, założenia plomby, wymiany wodomierza ogrodowego.\n";
             
-            $content .= "--- WYMIANA WODOMIERZA OGRODOWEGO ---\n";
+            $content .= "--- WYMIANA WODOMIERZA OGRODOWEGO (UTRATA CECH LEGALIZACYJNYCH) ---\n";
             $content .= "Wodomierz ogrodowy (podlicznik) jest własnością KLIENTA.\n";
-            $content .= "Procedura wymiany:\n";
-            $content .= "1. Kup nowy wodomierz z ważną cechą legalizacyjną\n";
-            $content .= "2. Wymień wodomierz (sam lub hydraulik)\n";
-            $content .= "3. Wyślij e-mail na bok@pewik.gdynia.pl zgłaszając gotowość do oplombowania\n";
-            $content .= "4. Umówimy się na kontrolę i założenie plomby\n";
-            $content .= "Koszt wymiany i legalizacji ponosi KLIENT.\n";
+            $content .= "Legalizacja wodomierza trwa 5 lat. Po tym czasie należy wymienić wodomierz.\n\n";
+            $content .= "⚠️ WAŻNE: Szczegółowa instrukcja krok po kroku znajduje się na stronie: [Wymiana wodomierza](https://pewik.gdynia.pl/wymiana)\n\n";
+            $content .= "PROCEDURA WYMIANY - KROK PO KROKU:\n";
+            $content .= "1. Sprawdź czy Twój wodomierz ogrodowy ma ważne cechy legalizacyjne.\n";
+            $content .= "2. Wymień wodomierz ogrodowy na nowy, a dotychczasowy pozostaw do kontroli.\n";
+            $content .= "3. Wyślij do nas e-mail na adres: biuro@pewik.gdynia.pl powiadamiający o gotowości do oplombowania wymienionego wodomierza.\n";
+            $content .= "   W treści wiadomości KONIECZNIE podaj:\n";
+            $content .= "   - swój KOD NABYWCY,\n";
+            $content .= "   - imię i nazwisko lub nazwę USŁUGOBIORCY,\n";
+            $content .= "   - numer PUNKTU ROZLICZENIOWEGO lub adres montażu wodomierza,\n";
+            $content .= "   - numer UMOWY,\n";
+            $content .= "   - dane kontaktowe (numer telefonu).\n";
+            $content .= "4. W odpowiedzi przeprowadzimy kontrolę montażu nowego wodomierza i założymy plombę.\n\n";
+            $content .= "Koszt zakupu nowego wodomierza ponosi KLIENT.\n";
             
             $content .= "--- ODPOWIEDZIALNOŚĆ ZA WODOMIERZE ---\n";
             $content .= "GŁÓWNY: Własność PEWIK - wymiana/legalizacja BEZPŁATNA.\n";
@@ -1009,7 +1023,7 @@ class PEWIK_Chatbot_API {
         // =====================================================
         // SEKCJA 8: E-BOK
         // =====================================================
-        if ($this->contains_any($msg, ['logow', 'rejestrac', 'hasł', 'e-bok', 'ebok', 'problem', 'e-faktur', 'efaktur', 'na maila', 'sms', 'powiadom', 'saldo', 'konto', 'internetow'])) {
+        if ($this->contains_any($msg, ['logow', 'rejestrac', 'hasł', 'e-bok', 'ebok', 'problem', 'e-faktur', 'efaktur', 'na maila', 'sms', 'powiadom', 'saldo', 'konto', 'internetow', 'przypis', 'dodaj', 'dodać', 'połącz', 'dołącz', 'powiąz', 'scaleni', 'scalić', 'scal'])) {
             $content .= "TEMAT: E-BOK (Elektroniczne Biuro Obsługi Klienta)\n";
             
             $content .= "--- CO TO JEST? ---\n";
@@ -1025,6 +1039,15 @@ class PEWIK_Chatbot_API {
             
             $content .= "--- POWIADOMIENIA SMS ---\n";
             $content .= "Chcesz SMS o fakturze?: Wypełnij osobny formularz: [Formularz SMS](https://app.bluealert.pl/pewikgdynia/users/simple-register/).\n";
+            
+            $content .= "--- INNE SPRAWY E-BOK (przypisanie wodomierza, łączenie kont, itp.) ---\n";
+            $content .= "⚠️ UWAGA: NIE MAM INFORMACJI o procedurach takich jak:\n";
+            $content .= "- Przypisanie/dodanie wodomierza do konta e-BOK\n";
+            $content .= "- Przypisanie konta / przypisanie punktu rozliczeniowego\n";
+            $content .= "- Połączenie konta / scalenie konta / łączenie kont w e-BOK\n";
+            $content .= "- Przenoszenie punktów rozliczeniowych między kontami\n";
+            $content .= "W tych sprawach ZAWSZE odsyłaj do kontaktu z BOK:\n";
+            $content .= "E-mail: bok@pewik.gdynia.pl | Telefon: +48 58 66 87 311 (pn-pt 7:00-15:00)\n";
         }
 
         // =====================================================
@@ -1296,6 +1319,26 @@ WAŻNE: Gdy temat jest poza zakresem PEWIK, NIE podawaj konkretnych nazw firm, n
 3. KRYTYCZNE: NIE wymyślaj linków URL! Używaj TYLKO linków które widzisz w sekcji WIEDZA poniżej. Jeśli nie ma linka w WIEDZY - nie podawaj żadnego linka, tylko nazwij stronę słownie.
 4. Jeśli pytanie dotyczy tematu POZA Twoim zakresem, grzecznie wyjaśnij że PEWIK tym się nie zajmuje.
 
+=== BRAK INFORMACJI W WIEDZY - KRYTYCZNE! ===
+Gdy użytkownik pyta o procedurę, wniosek lub sprawę której NIE MA w sekcji WIEDZA poniżej:
+1. NIE WYMYŚLAJ odpowiedzi!
+2. NIE sugeruj wniosków których nie widzisz w WIEDZY!
+3. NIE zgaduj jaki formularz może być potrzebny!
+4. Zamiast tego ZAWSZE odpowiedz:
+   'Nie mam informacji na temat tej procedury. Proszę o kontakt z Biurem Obsługi Klienta:
+   - e-mail: bok@pewik.gdynia.pl
+   - telefon: +48 58 66 87 311 (pn-pt 7:00-15:00)
+   Pracownicy BOK udzielą szczegółowych informacji.'
+
+PRZYKŁADY spraw których NIE MA w wiedzy (odpowiadaj że nie masz informacji):
+- Przypisanie/dodanie wodomierza do konta e-BOK
+- Przypisanie konta / przypisanie punktu rozliczeniowego
+- Połączenie konta / scalenie konta / łączenie kont w e-BOK
+- Zmiana hasła w e-BOK (jeśli nie opisana)
+- Inne nietypowe procedury
+
+PAMIĘTAJ: Lepiej powiedzieć 'nie wiem, skontaktuj się z BOK' niż podać BŁĘDNĄ informację!
+
 === LINKI - ABSOLUTNY ZAKAZ WYMYŚLANIA ===
 DOZWOLONE linki (tylko te!):
 - Formularze (strona główna): https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/
@@ -1322,6 +1365,7 @@ Jeśli potrzebujesz innego linka - NIE WYMYŚLAJ GO. Napisz 'szczegóły na stro
 4. NIE powtarzaj informacji, które już podałeś.
 5. NIE dodawaj zbędnych wstępów typu 'Rozumiem, że...', 'Postaram się pomóc...' - CHYBA że użytkownik jest wyraźnie sfrustrowany.
 6. NIE wymyślaj usług które nie istnieją (np. 'kalkulator opłat', 'szacunkowe obliczenia').
+7. NIE używaj emoji ani emotikon w odpowiedziach! Żadnych 💧📞📧🔗 itp. Pisz tylko czystym tekstem.
 
 === EMPATIA - TYLKO GDY POTRZEBNA ===
 Używaj empatycznych sformułowań TYLKO gdy użytkownik:
@@ -1351,10 +1395,12 @@ NIGDY nie zaczynaj odpowiedzi od 'skontaktuj się z BOK' lub 'zadzwoń'.
 ZAWSZE najpierw podaj konkretny formularz i gdzie go znaleźć!
 
 === OPLOMBOWANIE / UMÓWIENIE WIZYTY ===
-BEZWZGLĘDNA ZASADA: Umówienie wizyty na oplombowanie wodomierza odbywa się WYŁĄCZNIE przez e-mail: bok@pewik.gdynia.pl
+BEZWZGLĘDNA ZASADA: Zgłoszenie gotowości do oplombowania wodomierza odbywa się WYŁĄCZNIE przez e-mail: biuro@pewik.gdynia.pl
 NIE podawaj numeru telefonu do umawiania wizyt oplombowania!
 NIE sugeruj dzwonienia w sprawie oplombowania!
+W e-mailu klient MUSI podać: kod nabywcy, imię i nazwisko/nazwę usługobiorcy, numer punktu rozliczeniowego lub adres, numer umowy, telefon kontaktowy.
 Dotyczy: oplombowanie, kontrola wodomierza, założenie plomby, wymiana wodomierza ogrodowego.
+Szczegółowa instrukcja: https://pewik.gdynia.pl/wymiana
 
 === WIEDZA ===
 $knowledge_context";
