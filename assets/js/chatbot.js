@@ -48,6 +48,29 @@
 			log('Sesja w localStorage jest nieważna, czyszczenie...')
 			clearSession()
 		}
+
+		// Automatyczne otwarcie chatbota gdy URL zawiera #ai
+		if (window.location.hash === '#ai') {
+			log('Wykryto hash #ai - automatyczne otwarcie chatbota z efektem poświaty')
+			// Małe opóźnienie żeby DOM się w pełni załadował
+			setTimeout(function() {
+				openChat()
+				// Dodaj efekt pulsującej poświaty
+				$('#pewik-chatbot-window').addClass('glow-attention')
+				// Usuń efekt po 8 sekundach lub po pierwszej interakcji
+				setTimeout(function() {
+					$('#pewik-chatbot-window').removeClass('glow-attention')
+				}, 8000)
+				// Usuń efekt gdy użytkownik zacznie pisać
+				$('#pewik-chatbot-input').one('focus', function() {
+					$('#pewik-chatbot-window').removeClass('glow-attention')
+				})
+				// Opcjonalnie usuń hash z URL (bez przeładowania strony)
+				if (history.replaceState) {
+					history.replaceState(null, null, window.location.pathname + window.location.search)
+				}
+			}, 300)
+		}
 	})
 
 	function checkSessionValidity() {

@@ -112,6 +112,34 @@
 	}
 }
 
+/* Animacja pulsującej poświaty dla #ai */
+@keyframes glowPulse {
+	0%, 100% {
+		box-shadow:
+			0 24px 80px rgba(0, 0, 0, 0.12),
+			0 8px 32px rgba(0, 0, 0, 0.08),
+			0 0 20px rgba(42, 51, 66, 0.4),
+			0 0 40px rgba(42, 51, 66, 0.2);
+	}
+	50% {
+		box-shadow:
+			0 24px 80px rgba(0, 0, 0, 0.12),
+			0 8px 32px rgba(0, 0, 0, 0.08),
+			0 0 40px rgba(42, 51, 66, 0.6),
+			0 0 80px rgba(42, 51, 66, 0.4),
+			0 0 120px rgba(42, 51, 66, 0.2);
+	}
+}
+
+#pewik-chatbot-window.glow-attention {
+	animation: glowPulse 2s ease-in-out infinite;
+	border: 2px solid rgba(42, 51, 66, 0.5);
+}
+
+#pewik-chatbot-window.glow-attention #pewik-chatbot-header {
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), inset 0 -2px 20px rgba(255, 255, 255, 0.1);
+}
+
 /* ===========================================
    Nagłówek chatbota - #2a3342
    =========================================== */

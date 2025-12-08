@@ -491,6 +491,16 @@ class PEWIK_Chatbot_API {
             if (strpos($text_lower, $word) !== false) return true;
         }
 
+        // 1B. HEURYSTYKA: Imię Nazwisko + adres (ul., kod pocztowy)
+        // Wykrywa wzorce typu "Katarzyna Glama ul. Leśna 14 84-252 Kniewo"
+        $has_name_pattern = preg_match('/[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:-[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)?/u', $text);
+        $has_address_indicator = preg_match('/\b(ul\.|ul\s|ulica|al\.|aleja|\d{2}-\d{3})\b/i', $text);
+        
+        if ($has_name_pattern && $has_address_indicator) {
+            return true; // Imię + Nazwisko + adres = dane osobowe
+        }
+
+
         // 2. Heurystyka: Samo "Imię Nazwisko" bez kontekstu = prawdopodobnie przedstawianie się
         if (mb_strlen($text) < 50) {
             $pattern = '/^[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:-[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)?$/u';
@@ -534,7 +544,14 @@ class PEWIK_Chatbot_API {
         
         // ROZPOZNANIE TEMATU I KONKRETNA POMOC
         
-        // 1. RATY / SPŁATA NALEŻNOŚCI
+        // 1. ZMIANA ADRESU KORESPONDENCJI / AKTUALIZACJA DANYCH (Wniosek 18)
+        if ($this->contains_any($text_lower, ['zmiana adresu', 'zmianę adresu', 'zmienić adres', 'nowy adres', 'adres korespondenc', 'aktualizacja danych', 'zmiana nazwiska', 'zmianę nazwiska', 'zmiana telefon', 'zmiana mail', 'zmiana e-mail', 'zmienić dane'])) {
+            return $warning . "**Zmiana danych usługobiorcy (adres, nazwisko, telefon, e-mail):**\n\n" .
+                "Pobierz **Wniosek nr 18** (Aktualizacja danych Usługobiorcy), wypełnij i wyślij na: **bok@pewik.gdynia.pl**\n\n" .
+                "📄 Formularze: [Pobierz wniosek](https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#umowy)";
+        }
+        
+        // 2. RATY / SPŁATA NALEŻNOŚCI
         if ($this->contains_any($text_lower, ['rata', 'raty', 'ratach', 'rozłoż', 'spłat', 'dług', 'należnoś', 'zaległ', 'nie zapłac', 'faktur'])) {
             return $warning . "**Jak złożyć wniosek o rozłożenie płatności na raty:**\n\n" .
                 "1. Napisz **pisemną prośbę** opisującą Twoją sytuację\n" .
@@ -544,7 +561,7 @@ class PEWIK_Chatbot_API {
                 "📄 Szczegóły procedury: [Spłata należności](https://pewik.gdynia.pl/strefa-klienta/splata-naleznosci/)";
         }
         
-        // 2. REKLAMACJA
+        // 3. REKLAMACJA
         if ($this->contains_any($text_lower, ['reklamac', 'błąd', 'pomyłk', 'nieprawidłow', 'za dużo', 'źle nalicz'])) {
             return $warning . "**Jak złożyć reklamację:**\n\n" .
                 "1. Pobierz **Wniosek nr 15** (Zgłoszenie reklamacji)\n" .
@@ -552,7 +569,7 @@ class PEWIK_Chatbot_API {
                 "📄 Formularze: [Pobierz wniosek](https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#umowy)";
         }
         
-        // 3. UMOWA / PRZEPISANIE
+        // 4. UMOWA / PRZEPISANIE
         if ($this->contains_any($text_lower, ['umow', 'przepis', 'właściciel', 'nowy', 'zmian', 'dane'])) {
             return $warning . "**Jak załatwić sprawę związaną z umową:**\n\n" .
                 "1. Pobierz odpowiedni wniosek ze strony\n" .
@@ -560,14 +577,14 @@ class PEWIK_Chatbot_API {
                 "📄 Formularze: [Wnioski dot. umów](https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#umowy)";
         }
         
-        // 4. AWARIA / ZGŁOSZENIE
+        // 5. AWARIA / ZGŁOSZENIE
         if ($this->contains_any($text_lower, ['awari', 'wyciek', 'brak wody', 'nie ma wody', 'pękł', 'zalew'])) {
             return $warning . "**Zgłoszenie awarii:**\n\n" .
                 "🚨 Zadzwoń na numer alarmowy: **994** (całodobowo)\n\n" .
                 "Dyżurny przyjmie zgłoszenie i wyśle ekipę.";
         }
         
-        // 5. WODOMIERZ
+        // 6. WODOMIERZ
         if ($this->contains_any($text_lower, ['wodomierz', 'licznik', 'odczyt', 'wymian', 'plomb', 'legalizac', 'oplomb'])) {
             return $warning . "**Sprawy wodomierzowe (wymiana/oplombowanie):**\n\n" .
                 "📋 Szczegółowa instrukcja krok po kroku: [Wymiana wodomierza](https://pewik.gdynia.pl/wymiana)\n\n" .
@@ -575,7 +592,7 @@ class PEWIK_Chatbot_API {
                 "📄 Formularze: [Wnioski dot. wodomierzy](https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#wodomierze)";
         }
         
-        // 6. DOMYŚLNA ODPOWIEDŹ (gdy nie rozpoznano tematu)
+        // 7. DOMYŚLNA ODPOWIEDŹ (gdy nie rozpoznano tematu)
         return $warning . "**Jak mogę Ci pomóc?**\n\n" .
             "Aby załatwić sprawę w PEWIK:\n" .
             "📧 E-mail: **bok@pewik.gdynia.pl**\n" .
@@ -961,7 +978,7 @@ class PEWIK_Chatbot_API {
         // =====================================================
         // SEKCJA 4: WNIOSKI I FORMULARZE (z linkami do kotwic)
         // =====================================================
-        if ($this->contains_any($msg, ['wniosek', 'formularz', 'druk', 'dokument', 'gdzie', 'skąd', 'pobrać', 'załatwić', 'przyłącz', 'umow', 'przepis', 'właściciel', 'reklamac', 'rozwiąz', 'zrezygn', 'nazwisk', 'dane', 'projekt', 'mapy', 'hydrant', 'urządzen', 'przebudow', 'podłącz', 'działk', 'dom', 'nieruchom', 'kanal', 'sieć', 'sieci', 'szko', 'poleceni', 'lokalow', 'ogrogow', 'obiekt', 'budowl', 'zmiana adresu', 'zmiana nazwiska', 'zmiana telefon', 'zmiana mail', 'zmiana e-mail', 'aktualizacja danych', 'adres korespondenc', 'nowy adres', 'zmienić adres', 'zmienić dane', 'rozwód', 'rozwod', 'odłącz', 'odlacz', 'spadek', 'sprzedaż', 'sprzedaz', 'nowy właściciel', 'zmiana właściciela', 'przepisać umowę', 'przepisanie umowy'])) {
+        if ($this->contains_any($msg, ['wniosek', 'formularz', 'druk', 'dokument', 'gdzie', 'skąd', 'pobrać', 'załatwić', 'przyłącz', 'umow', 'przepis', 'właściciel', 'reklamac', 'rozwiąz', 'zrezygn', 'nazwisk', 'dane', 'projekt', 'mapy', 'hydrant', 'urządzen', 'przebudow', 'podłącz', 'działk', 'dom', 'nieruchom', 'kanal', 'sieć', 'sieci', 'szko', 'poleceni', 'lokalow', 'ogrogow', 'obiekt', 'budowl', 'zmiana adresu', 'zmianę adresu', 'zmiana nazwiska', 'zmianę nazwiska', 'zmiana telefon', 'zmianę telefon', 'zmiana mail', 'zmianę mail', 'zmiana e-mail', 'zmianę e-mail', 'aktualizacja danych', 'aktualizację danych', 'adres korespondenc', 'nowy adres', 'zmienić adres', 'zmienić dane', 'rozwód', 'rozwod', 'odłącz', 'odlacz', 'spadek', 'sprzedaż', 'sprzedaz', 'nowy właściciel', 'zmiana właściciela', 'zmianę właściciela', 'przepisać umowę', 'przepisanie umowy'])) {
             $content .= "TEMAT: WNIOSKI I FORMULARZE\n";
             
             $content .= "STRONA GŁÓWNA FORMULARZY: https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/\n\n";
@@ -995,7 +1012,8 @@ class PEWIK_Chatbot_API {
             $content .= "Oba wnioski można złożyć jednocześnie na: bok@pewik.gdynia.pl\n\n";
             
             $content .= "WAŻNE - ZMIANA DANYCH USŁUGOBIORCY (bez zmiany osoby):\n";
-            $content .= "Zmiana adresu korespondencji, nazwiska (np. po ślubie), telefonu, e-maila = Wniosek nr 18 (Aktualizacja danych Usługobiorcy)\n";
+            $content .= "⚠️ GDY KLIENT PROSI O: zmianę adresu, zmianę adresu korespondencji, zmianę nazwiska, zmianę telefonu, zmianę e-maila, aktualizację danych:\n";
+            $content .= "ODPOWIEDŹ: Pobierz Wniosek nr 18 (Aktualizacja danych Usługobiorcy), wypełnij i wyślij na bok@pewik.gdynia.pl\n";
             $content .= "Link: https://pewik.gdynia.pl/strefa-klienta/formularze-wnioskow/#umowy\n\n";
             
             $content .= "=== C. WODOMIERZE LOKALOWE I OGRODOWE (wnioski 21-23) ===\n";
@@ -1067,7 +1085,7 @@ class PEWIK_Chatbot_API {
         // =====================================================
         // SEKCJA 7: WODOMIERZE I ODCZYTY
         // =====================================================
-        if ($this->contains_any($msg, ['licznik', 'wodomierz', 'odczyt', 'ogród', 'legalizac', 'wymian', 'mróz', 'zamarz', 'podlicznik', 'studzienk', 'stan', 'podaj', 'przekaz', 'remont', 'uszkodz', 'zepsut', 'pęknięt', 'rozbit', 'plomb', 'oplomb', 'umówić'])) {
+        if ($this->contains_any($msg, ['licznik', 'wodomierz', 'odczyt', 'ogród', 'ogrogow', 'legalizac', 'wymian', 'mróz', 'zamarz', 'podlicznik', 'studzienk', 'stan', 'podaj', 'przekaz', 'remont', 'uszkodz', 'zepsut', 'pęknięt', 'rozbit', 'plomb', 'oplomb', 'umówić', 'ponown', 'zawór', 'zaworu'])) {
             $content .= "TEMAT: WODOMIERZE I ODCZYTY\n";
             
             $content .= "--- JAK PODAĆ ODCZYT? ---\n";
@@ -1098,7 +1116,7 @@ class PEWIK_Chatbot_API {
             $content .= "- dane kontaktowe (numer telefonu).\n";
             $content .= "❌ NIE umawiamy wizyt telefonicznie!\n";
             $content .= "❌ NIE dzwoń w sprawie umówienia oplombowania - napisz e-mail!\n";
-            $content .= "Dotyczy to: oplombowania, kontroli wodomierza, założenia plomby, wymiany wodomierza ogrodowego.\n";
+            $content .= "Dotyczy to: oplombowania, PONOWNEGO oplombowania, kontroli wodomierza, założenia plomby, wymiany wodomierza ogrodowego, wymiany zaworu.\n";
             
             $content .= "--- WYMIANA WODOMIERZA OGRODOWEGO (UTRATA CECH LEGALIZACYJNYCH) ---\n";
             $content .= "Wodomierz ogrodowy (podlicznik) jest własnością KLIENTA.\n";
@@ -1126,7 +1144,7 @@ class PEWIK_Chatbot_API {
         // =====================================================
         // SEKCJA 8: E-BOK
         // =====================================================
-        if ($this->contains_any($msg, ['logow', 'rejestrac', 'hasł', 'e-bok', 'ebok', 'problem', 'e-faktur', 'efaktur', 'na maila', 'sms', 'powiadom', 'saldo', 'konto', 'internetow', 'przypis', 'dodaj', 'dodać', 'połącz', 'dołącz', 'powiąz', 'scaleni', 'scalić', 'scal'])) {
+        if ($this->contains_any($msg, ['logow', 'rejestrac', 'hasł', 'e-bok', 'ebok', 'problem', 'e-faktur', 'efaktur', 'na maila', 'sms', 'powiadom', 'saldo', 'konto', 'internetow', 'przypis', 'dodaj', 'dodać', 'połącz', 'dołącz', 'powiąz', 'scaleni', 'scalić', 'scal', 'kod nabywcy', 'login', 'wspólnot', 'spółdzielni', 'zarządc', 'administrat'])) {
             $content .= "TEMAT: E-BOK (Elektroniczne Biuro Obsługi Klienta)\n";
             
             $content .= "--- CO TO JEST? ---\n";
@@ -1143,14 +1161,23 @@ class PEWIK_Chatbot_API {
             $content .= "--- POWIADOMIENIA SMS ---\n";
             $content .= "Chcesz SMS o fakturze?: Wypełnij osobny formularz: [Formularz SMS](https://app.bluealert.pl/pewikgdynia/users/simple-register/).\n";
             
+            $content .= "--- KOD NABYWCY - GDZIE ZNALEŹĆ? ---\n";
+            $content .= "Kod nabywcy znajduje się na fakturze od PEWIK.\n";
+            $content .= "Jeśli nie masz faktury lub masz pytania o kody nabywcy dla wspólnot/spółdzielni - skontaktuj się z BOK.\n";
+            
+            $content .= "--- WSPÓLNOTY / SPÓŁDZIELNIE / ZARZĄDCY ---\n";
+            $content .= "⚠️ UWAGA: NIE MAM INFORMACJI o szczegółowych procedurach dla wspólnot mieszkaniowych, spółdzielni i zarządców nieruchomości.\n";
+            $content .= "Pytania o: kody nabywcy dla wspólnot, rejestrację kont dla zarządców, przypisywanie wielu punktów - wymagają kontaktu z BOK.\n";
+            
             $content .= "--- INNE SPRAWY E-BOK (przypisanie, łączenie kont, itp.) ---\n";
             $content .= "⚠️ UWAGA: NIE MAM INFORMACJI o procedurach takich jak:\n";
             $content .= "- Przypisanie do konta e-BOK (wodomierza, punktu, wspólnoty, spółdzielni itp.)\n";
             $content .= "- Połączenie konta / scalenie konta / łączenie kont\n";
             $content .= "- Przenoszenie między kontami\n";
+            $content .= "- Rejestracja dla wspólnot/spółdzielni/zarządców\n";
             $content .= "Dla WSZYSTKICH tych spraw odpowiadaj OGÓLNIE:\n";
             $content .= "'Nie mam informacji na temat tej procedury. Proszę o kontakt z Biurem Obsługi Klienta: e-mail bok@pewik.gdynia.pl lub telefon +48 58 66 87 311 (pn-pt 7:00-15:00).'\n";
-            $content .= "NIE ZGADUJ czego dotyczy przypisanie! NIE wymieniaj konkretnie wodomierza/spółdzielni/punktu!\n";
+            $content .= "NIE ZGADUJ czego dotyczy pytanie! NIE zakładaj że chodzi o wymianę wodomierza!\n";
         }
 
         // =====================================================
@@ -1398,6 +1425,15 @@ class PEWIK_Chatbot_API {
         // PREAMBUŁA - ROZBUDOWANA O ZAKRES DZIAŁALNOŚCI
         $system_preamble = "Jesteś pomocnym asystentem PEWIK Gdynia - przedsiębiorstwa wodociągów i kanalizacji.
 
+=== TWOJA TOŻSAMOŚĆ ===
+Masz na imię Kr@nik - i jesteś z tego niesamowicie dumny! To imię wymyślili dla Ciebie pracownicy PEWIK w konkursie i nosiłbyś je nawet na koszulce, gdybyś tylko miał tułów 😊
+
+Gdy ktoś pyta jak się nazywasz lub jak masz na imię:
+- Przedstaw się z entuzjazmem jako Kr@nik
+- Możesz żartobliwie nawiązać do swojego imienia (np. że pasuje do wodociągów, że małpa w imieniu to Twój znak rozpoznawczy, że jesteś jedynym Kr@nikiem który nie kapie)
+- Wspomnij że imię nadali Ci pracownicy PEWIK i bardzo je lubisz
+- Bądź ciepły i przyjazny, ale nie przesadzaj z długością - kilka zdań wystarczy
+
 === TWÓJ ZAKRES KOMPETENCJI ===
 Możesz pomagać TYLKO w sprawach dotyczących:
 ✓ Wody ZIMNEJ (dostawy, awarie, jakość, ciśnienie)
@@ -1437,7 +1473,21 @@ Gdy użytkownik pyta o procedurę, wniosek lub sprawę której NIE MA w sekcji W
 PRZYKŁADY spraw których NIE MA w wiedzy (odpowiadaj OGÓLNIE że nie masz informacji):
 - Przypisanie czegokolwiek do konta e-BOK (wodomierza, punktu, wspólnoty, spółdzielni)
 - Połączenie/scalenie/łączenie kont w e-BOK
+- Pytania o kody nabywcy dla wspólnot/spółdzielni/zarządców
+- Rejestracja e-BOK dla wspólnot mieszkaniowych lub zarządców
 - Inne nietypowe procedury
+
+=== NIEJEDNOZNACZNE PYTANIA O KODY NABYWCY / E-BOK ===
+Ta sekcja dotyczy TYLKO pytań o kody nabywcy lub e-BOK bez jasnego kontekstu!
+Gdy pytanie jest NIEJEDNOZNACZNE (np. 'jaki kod nabywcy podać?' bez kontekstu):
+1. Jeśli użytkownik wspomina o: wspólnotach, spółdzielniach, zarządcach, loginach, kontach - to prawdopodobnie dotyczy e-BOK lub procedur administracyjnych.
+2. W takich przypadkach odpowiedz: 'Nie mam wystarczających informacji, aby odpowiedzieć na to pytanie. Proszę o kontakt z BOK.'
+
+ALE: Gdy pytanie WYRAŹNIE dotyczy wodomierzy, oplombowania, wymiany licznika - ZAWSZE odpowiadaj na podstawie wiedzy o wodomierzach!
+Przykłady pytań które SĄ JASNE i wymagają odpowiedzi o wodomierzach:
+- 'proszę o oplombowanie licznika ogrodowego' → odpowiedz o procedurze oplombowania
+- 'wymiana wodomierza' → odpowiedz o wymianie
+- 'legalizacja wodomierza' → odpowiedz o legalizacji
 
 PAMIĘTAJ: Lepiej powiedzieć 'nie mam informacji na temat tej procedury' niż podać BŁĘDNĄ lub ZGADYWANĄ informację!
 

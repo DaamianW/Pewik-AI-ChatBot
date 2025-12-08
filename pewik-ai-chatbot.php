@@ -592,7 +592,7 @@ function pewik_chatbot_add_widget() {
         <div id="pewik-chatbot-window" style="display: none;">
             <div id="pewik-chatbot-header">
                 <div>
-                    <h3>Wirtualny asystent PEWIK Gdynia</h3>
+                    <h3>Kr@nik - Wirtualny asystent</h3>
                 </div>
                 <div class="chatbot-header-actions">
                     <button id="pewik-chatbot-reset" aria-label="Nowa konwersacja" title="Rozpocznij nową konwersację">
@@ -631,7 +631,7 @@ function pewik_chatbot_add_widget() {
                 </button>
             </div>
             <div id="pewik-chatbot-disclaimer">
-                Wirtualny asystent PEWIK Gdynia może się mylić, w tym w informacjach o osobach, dlatego sprawdzaj jego odpowiedzi. <a href="#" target="_blank">Twoja prywatność</a>
+                Wirtualny asystent Kr@nik może się mylić, w tym w informacjach o osobach, dlatego sprawdzaj jego odpowiedzi. <a href="https://192.168.120.7/archiwa/18013" target="_blank">Twoja prywatność</a>
             </div>
         </div>
     </div>
@@ -666,7 +666,7 @@ function pewik_chatbot_enqueue_assets() {
         'sessionCreateUrl' => rest_url('pewik-chatbot/v1/session/create'),
         'sessionResetUrl' => rest_url('pewik-chatbot/v1/session/reset'),
         'nonce' => wp_create_nonce('wp_rest'),
-        'agentName' => 'Wirtualny asystent PEWIK Gdynia',
+        'agentName' => 'Wirtualny asystent Kr@nik',
         'region' => PEWIK_REGION
     ));
 }
