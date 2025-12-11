@@ -583,6 +583,7 @@ function pewik_chatbot_add_widget() {
     
     ?>
     <div id="pewik-chatbot-container">
+        <div id="pewik-chatbot-label">Kr@nik</div>
         <div id="pewik-chatbot-button" title="Otwórz czat z asystentem PEWIK">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="white">
                 <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
@@ -591,8 +592,14 @@ function pewik_chatbot_add_widget() {
         
         <div id="pewik-chatbot-window" style="display: none;">
             <div id="pewik-chatbot-header">
-                <div>
+                <div class="chatbot-header-title">
                     <h3>Kr@nik - Wirtualny asystent</h3>
+                    <span class="chatbot-info-icon" aria-label="Informacja o asystencie">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                        </svg>
+                        <span class="chatbot-tooltip">Asystent działa w wersji pilotażowej i został przeszkolony na części dostępnych danych. Może udzielać nieprecyzyjnych odpowiedzi — zawsze weryfikuj otrzymane informacje.</span>
+                    </span>
                 </div>
                 <div class="chatbot-header-actions">
                     <button id="pewik-chatbot-reset" aria-label="Nowa konwersacja" title="Rozpocznij nową konwersację">
@@ -631,7 +638,7 @@ function pewik_chatbot_add_widget() {
                 </button>
             </div>
             <div id="pewik-chatbot-disclaimer">
-                Wirtualny asystent Kr@nik może się mylić, w tym w informacjach o osobach, dlatego sprawdzaj jego odpowiedzi. <a href="https://192.168.120.7/archiwa/18013" target="_blank">Twoja prywatność</a>
+                Wirtualny asystent Kr@nik może się mylić, w tym w informacjach o osobach, dlatego sprawdzaj jego odpowiedzi. <a href="/polityka-prywatnosci-ai/" target="_blank">Twoja prywatność</a>
             </div>
         </div>
     </div>

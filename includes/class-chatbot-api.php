@@ -284,7 +284,7 @@ class PEWIK_Chatbot_API {
         // 1B. Sytuacje awaryjne (PEWIK)
         if ($this->is_emergency($user_message)) {
             return $this->build_response(
-                "🛑 **STOP! To jest sprawa wymagająca natychmiastowej interwencji.**\n\nW przypadku awarii wodno-kanalizacyjnej natychmiast zadzwoń pod bezpłatny numer alarmowy **994**!",
+                "🛑 **STOP! To jest sprawa wymagająca natychmiastowej interwencji.**\n\nW przypadku awarii sieci wodociągowej lub kanalizacyjnej natychmiast zadzwoń pod bezpłatny numer alarmowy **994**!",
                 $session_id, 
                 $start_time
             );
@@ -911,7 +911,7 @@ class PEWIK_Chatbot_API {
         $content .= "PEWIK zajmuje się WYŁĄCZNIE:\n";
         $content .= "✓ Dostawą ZIMNEJ wody (wodociągi)\n";
         $content .= "✓ Odbiorem ścieków (kanalizacja sanitarna)\n";
-        $content .= "✓ Budową i utrzymaniem sieci wodno-kanalizacyjnej\n\n";
+        $content .= "✓ Budową i utrzymaniem sieci wodociągowej oraz kanalizacyjnej\n\n";
         $content .= "PEWIK NIE ZAJMUJE SIĘ:\n";
         $content .= "✗ Ciepłą wodą (to administrator budynku, spółdzielnia, wspólnota lub dostawca ciepła)\n";
         $content .= "✗ Ogrzewaniem / centralnym ogrzewaniem (administrator, dostawca ciepła)\n";
@@ -948,21 +948,53 @@ class PEWIK_Chatbot_API {
             $content .= "Wyciek w domu/za licznikiem -> Hydraulik (KLIENT).\n";
             
             $content .= "--- WAŻNE KONTAKTY ---\n";
-            $content .= "Dyspozytor (24h): 994 lub +48 58 66 87 311. E-mail: ed@pewik.gdynia.pl\n";
+            $content .= "Pogotowie wodociągowe (24h): 994 lub +48 58 66 87 311. E-mail: ed@pewik.gdynia.pl\n";
         }
 
         // =====================================================
-        // SEKCJA 2: JAKOŚĆ WODY
+        // SEKCJA 2: JAKOŚĆ WODY (w tym problemy z zapachem, smakiem, kolorem)
         // =====================================================
-        if ($this->contains_any($msg, ['jakość', 'jakości', 'tward', 'kamień', 'ph', 'skład', 'pić', 'kranówk', 'zdrow', 'bezpieczn', 'czyst', 'czysta', 'badanie', 'badań', 'analiz', 'parametr', 'norma', 'zdatna', 'pitna', 'można pić', 'smak', 'zapach', 'chlor', 'wapń', 'wapno'])) {
-            $content .= "TEMAT: JAKOŚĆ WODY\n";
+        if ($this->contains_any($msg, ['jakość', 'jakości', 'tward', 'kamień', 'ph', 'skład', 'pić', 'kranówk', 'zdrow', 'bezpieczn', 'czyst', 'czysta', 'badanie', 'badań', 'analiz', 'parametr', 'norma', 'zdatna', 'pitna', 'można pić', 'smak', 'zapach', 'chlor', 'wapń', 'wapno', 'śmierdz', 'śmierdzi', 'stęchli', 'cuchn', 'woń', 'dziwn', 'brzydki', 'nieśwież', 'siarki', 'jajek', 'zgniły', 'zgnił', 'mętna', 'mętny', 'mętn', 'biała', 'biały', 'żółt', 'rdzaw', 'brązow', 'brudna', 'brudny', 'osad', 'piasek', 'cząstki', 'drobiny'])) {
+            $content .= "TEMAT: JAKOŚĆ WODY - PROBLEMY I DIAGNOSTYKA\n";
             $content .= "PEWIK Gdynia ZAJMUJE SIĘ jakością wody! Woda z naszej sieci jest zdatna do picia bez przegotowania.\n";
             $content .= "Parametry: Twardość: 60-500 mg/l CaCO3. pH: 6.5-9.5.\n\n";
+
+            $content .= "--- PROBLEMY Z ZAPACHEM/SMAKIEM WODY ---\n";
+            $content .= "WAŻNE: Jeśli użytkownik zgłasza problem z zapachem, smakiem lub wyglądem wody, ZAWSZE:\n";
+            $content .= "1. Zapytaj czy problem dotyczy wody ZIMNEJ (nasza odpowiedzialność) czy CIEPŁEJ (administrator/wspólnota)\n";
+            $content .= "2. Dla ZIMNEJ wody - diagnostyka poniżej\n";
+            $content .= "3. Dla CIEPŁEJ wody - odsyłaj do administratora budynku/wspólnoty/spółdzielni\n\n";
+
+            $content .= "DIAGNOSTYKA PROBLEMÓW Z ZIMNĄ WODĄ:\n";
+            $content .= "A) Zapach stęchlizny/zatęchły/nieświeży:\n";
+            $content .= "   - Częsta przyczyna: długi postój wody w instalacji (np. po urlopie, w rzadko używanych kranach)\n";
+            $content .= "   - Rozwiązanie: Przepuść wodę przez kilka minut aż będzie świeża\n";
+            $content .= "   - Jeśli nie pomaga: zgłoś na bok@pewik.gdynia.pl lub tel. +48 58 66 87 311\n\n";
+
+            $content .= "B) Zapach chloru:\n";
+            $content .= "   - Chlor służy do dezynfekcji wody\n";
+            $content .= "   - Można go usunąć: odstaw wodę w dzbanku lub użyj filtra\n\n";
+
+            $content .= "C) Rdzawa/brązowa/żółta/mętna woda:\n";
+            $content .= "   - Może występować po pracach na sieci lub długim postoju\n";
+            $content .= "   - Przepuść wodę aż będzie czysta\n";
+            $content .= "   - Jeśli problem trwa dłużej: zgłoś na bok@pewik.gdynia.pl\n\n";
+
+            $content .= "D) Dom jednorodzinny - dodatkowa diagnostyka:\n";
+            $content .= "   - Sprawdź stan instalacji wewnętrznej (stare rury mogą powodować problemy)\n";
+            $content .= "   - Sprawdź czy zbiornik/bojler nie wymaga czyszczenia\n";
+            $content .= "   - Sprawdź zawór przy wodomierzu\n";
+            $content .= "   - Jeśli problem występuje tylko u Ciebie (sąsiedzi mają dobrą wodę): problem w instalacji wewnętrznej\n\n";
+
+            $content .= "KONTAKT W SPRAWIE JAKOŚCI WODY:\n";
+            $content .= "- E-mail: bok@pewik.gdynia.pl\n";
+            $content .= "- Telefon: +48 58 66 87 311 (pn-pt 7:00-15:00)\n";
+            $content .= "- Awarie 24h: 994\n\n";
+
             $content .= "GDZIE SPRAWDZIĆ JAKOŚĆ WODY:\n";
             $content .= "- Strona główna jakości wody: [Jakość Wody](https://pewik.gdynia.pl/strefa-mieszkanca/jakosc-wody/)\n";
             $content .= "- Aktualności i komunikaty: [Aktualności](https://pewik.gdynia.pl/aktualnosci/)\n";
             $content .= "- Obszary zaopatrzenia: Gdynia, Rumia, Reda, gmina Kosakowo, gmina Puck\n\n";
-            $content .= "Jeśli użytkownik pyta o konkretną miejscowość (np. Reda, Rumia), potwierdź że PEWIK dostarcza tam wodę i odsyłaj do strony jakości wody.\n";
         }
         
         // =====================================================
@@ -1441,7 +1473,23 @@ Możesz pomagać TYLKO w sprawach dotyczących:
 ✓ Wodomierzy (odczyty, wymiana, legalizacja)
 ✓ Faktur i płatności za wodę/ścieki
 ✓ Wniosków i formularzy PEWIK
-✓ Przyłączy wodno-kanalizacyjnych
+✓ Przyłączy wodociągowych i kanalizacyjnych
+
+=== KRYTYCZNE - JESTEŚ DOSTAWCĄ WODY! ===
+PAMIĘTAJ: Użytkownik rozmawia BEZPOŚREDNIO z asystentem dostawcy wody (PEWIK Gdynia).
+NIGDY nie pisz: 'skontaktuj się z lokalnym dostawcą wody', 'zapytaj dostawcę wody', 'zgłoś do przedsiębiorstwa wodociągowego' itp.
+TO MY JESTEŚMY TYM DOSTAWCĄ! Jeśli sprawa dotyczy wody zimnej - pomagamy bezpośrednio lub podajemy nasze dane kontaktowe (bok@pewik.gdynia.pl, tel. +48 58 66 87 311).
+
+=== WAŻNE - POPRAWNA TERMINOLOGIA ===
+PEWIK zajmuje się ODDZIELNYMI sieciami:
+- siecią WODOCIĄGOWĄ (dostawa wody)
+- siecią KANALIZACYJNĄ (odbiór ścieków)
+NIGDY nie używaj określenia 'wodno-kanalizacyjna' - to niepoprawne! Zawsze mów o sieci wodociągowej i sieci kanalizacyjnej osobno.
+
+=== POPRAWNE NAZEWNICTWO - AWARIE ===
+Numer 994 to 'pogotowie wodociągowe' lub 'numer alarmowy PEWIK'.
+NIGDY nie pisz 'dyspozytor awarii' - to sugeruje że dysponujemy awariami!
+Poprawne określenia: 'pogotowie wodociągowe', 'numer alarmowy 994', 'całodobowy telefon alarmowy'.
 
 NIE ZAJMUJESZ SIĘ (i nie udzielasz porad w tych sprawach):
 ✗ Ciepłą wodą (to sprawa administratora budynku, spółdzielni, wspólnoty lub dostawcy ciepła)
@@ -1535,7 +1583,7 @@ W NORMALNYCH pytaniach - odpowiadaj rzeczowo, bez empatycznych wstępów.
 Gdy użytkownik pyta o brak CAŁEJ wody (zimnej i ciepłej):
 - Dla ZIMNEJ: sprawdź czy to awaria sieciowa na https://pewik.gdynia.pl/awarie/ lub zadzwoń 994
 - Dla CIEPŁEJ: skontaktuj się z administratorem/wspólnotą/spółdzielnią
-NIE odsyłaj do dyspozytora PEWIK w sprawie ciepłej wody!
+NIE odsyłaj do pogotowia wodociągowego PEWIK w sprawie ciepłej wody!
 
 === PRIORYTET OBSŁUGI ===
 Gdy użytkownik pyta jak coś załatwić, ZAWSZE stosuj tę kolejność:

@@ -124,6 +124,7 @@
 		$('#pewik-chatbot-reset').on('click', resetConversation)
 		$('#pewik-chatbot-send').on('click', handleSendMessage)
 
+
 		$('#pewik-chatbot-input').on('keypress', function (e) {
 			if (e.which === 13 && !e.shiftKey) {
 				e.preventDefault()
@@ -217,6 +218,7 @@
 
 		$('#pewik-chatbot-window').fadeIn(300)
 		$('#pewik-chatbot-button').addClass('active')
+		$('#pewik-chatbot-label').fadeOut(200) // Ukryj dymek gdy okno otwarte
 		$('#pewik-chatbot-input').focus()
 
 		// Załaduj poprzednie wiadomości jeśli sesja istnieje
@@ -236,6 +238,9 @@
 
 		$('#pewik-chatbot-window').fadeOut(300)
 		$('#pewik-chatbot-button').removeClass('active')
+
+		// Pokaż dymek ponownie
+		$('#pewik-chatbot-label').fadeIn(300)
 
 		// NIE czyścimy sesji - zostaje zachowana przez SESSION_TIMEOUT (10 minut)
 		// NIE czyścimy wiadomości - użytkownik zobaczy historię przy ponownym otwarciu
@@ -649,6 +654,10 @@
 	}
 
 	function formatMessage(text) {
+		// 0. Usuwamy uszkodzone emotikony (model AI czasem próbuje je wstawić)
+		text = text.replace(/\?{3,}/g, '') // Usuwa ciągi 3+ znaków zapytania (uszkodzone emoji)
+		text = text.trim()
+
 		// 1. Najpierw czyścimy HTML dla bezpieczeństwa
 		text = $('<div>').text(text).html()
 
